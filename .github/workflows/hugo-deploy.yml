@@ -1,0 +1,55 @@
+# Workflow 名称
+name: Hugo-deploy
+
+# 触发条件：当代码 push 到 main 分支时执行
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # 运行环境：GitHub 提供的 Ubuntu 虚拟机
+    runs-on: ubuntu-latest
+
+    # 赋予 Action 向仓库写入内容的权限（用于推送 gh-pages 分支）
+    permissions:
+      contents: write
+
+    steps:
+      # 1. 拉取仓库代码
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 如果主题使用 git submodule 引入，需要递归拉取
+          submodules: recursive
+          # 获取完整 git 历史（某些主题或插件需要）
+          fetch-depth: 0
+
+      # 2. 安装 Hugo
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          # 使用最新 Hugo 版本
+          hugo-version: latest
+          # 使用 extended 版本（支持 SCSS/SASS）
+          extended: true
+
+      # 3. 构建 Hugo 网站
+      - name: Build
+        # --gc 清理未使用缓存
+        # --minify 压缩 HTML/CSS/JS，减少页面体积
+        run: hugo --gc --minify
+
+      # 4. 部署到 GitHub Pages
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          # 使用 GitHub 自动提供的 token，无需手动创建
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # 要发布的目录（Hugo 构建输出目录）
+          publish_dir: ./public
+          # 发布到 gh-pages 分支（与源码 main 分离）
+          publish_branch: gh-pages
+          # 自动生成提交信息
+          commit_message: "Deploy: ${{ github.sha }}"

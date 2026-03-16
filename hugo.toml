@@ -1,0 +1,156 @@
+# ==============================================================================
+# 基础配置
+# ==============================================================================
+baseURL = 'https://Orangex-position0.github.io/'  # TODO: 替换 username 为你的 GitHub 用户名
+languageCode = 'zh-cn'
+title = '我的技术博客'
+theme = 'stack'
+hasCJKLanguage = true  # 启用中日韩文字支持
+
+# ==============================================================================
+# 语言配置
+# ==============================================================================
+defaultContentLanguage = 'zh-cn'
+
+[languages]
+  [languages.zh-cn]
+    languageName = '中文'
+    title = '我的技术博客'
+    weight = 1
+
+# ==============================================================================
+# 菜单配置
+# ==============================================================================
+[menus]
+  [[menus.main]]
+    name = '首页'
+    pageRef = '/'
+    weight = 10
+
+  [[menus.main]]
+    name = '文章'
+    pageRef = '/posts'
+    weight = 20
+
+  [[menus.main]]
+    name = '分类'
+    pageRef = '/categories'
+    weight = 30
+
+  [[menus.main]]
+    name = '标签'
+    pageRef = '/tags'
+    weight = 40
+
+  [[menus.main]]
+    name = '关于'
+    pageRef = '/about'
+    weight = 50
+
+# ==============================================================================
+# Stack 主题配置
+# ==============================================================================
+[params]
+  # 网站描述（用于 SEO）
+  description = '分享技术文章，记录学习心得'
+
+  # 主页配置
+  [params.homepage]
+    # 主页布局模式：'page' (页面) 或 'profile' (个人资料卡片)
+    layout = 'profile'
+
+    # 个人资料配置（当 layout = 'profile' 时生效）
+    [params.homepage.profile]
+      avatarURL = '/img/avatar.png'  # 头像路径（需放在 static/img/ 目录下）
+      title = '我的技术博客'
+      subtitle = '记录学习 | 分享知识 | 持续成长'
+      social = true
+      disableGrayscaleHover = false
+
+  # 文章列表配置
+  [params.list]
+    # 显示文章分组（按日期/系列）
+    groupByYear = true
+    # 显示文章摘要
+    showCards = true
+
+  # 文章页面配置
+  [params.article]
+    # 显示目录
+    toc = true
+    # 目录折叠
+    tocOpen = false
+    # 显示阅读时间
+    readingTime = true
+    # 显示预估阅读时间
+    estimatedTime = true
+    # 显示相关文章
+    relatedPosts = true
+
+  # 侧边栏配置
+  [params.sidebar]
+    # 侧边栏位置：'left' 或 'right'
+    position = 'left'
+    # 文章页面显示侧边栏
+    articles = true
+
+  # 评论系统配置（选择一个启用）
+  [params.comments]
+    enabled = false
+    # 如需启用评论，可配置以下任一系统：
+    # - Disqus: provider = 'disqus'
+    # - Utterances: provider = 'utterances'
+    # - Giscus: provider = 'giscus'
+    # - Waline: provider = 'waline'
+
+# ==============================================================================
+# 分类和标签配置
+# ==============================================================================
+[taxonomies]
+  category = 'categories'
+  tag = 'tags'
+  series = 'series'
+
+# ==============================================================================
+# 其他配置
+# ==============================================================================
+# 每页显示文章数量
+paginate = 10
+
+# 代码高亮配置
+[markup]
+  [markup.highlight]
+    # 代码高亮样式
+    style = 'github-dark'
+    # 行号
+    lineNos = false
+    # 代码高亮检测
+    guessSyntax = true
+    # 不高亮的语言
+    noClasses = false
+
+# Markdown 解析器配置
+[markup.goldmark]
+  [markup.goldmark.renderer]
+    # 允许 HTML 标签
+    unsafe = true
+
+# ==============================================================================
+# 隐私配置（可选）
+# ==============================================================================
+[privacy]
+  [privacy.vimeo]
+    disabled = false
+    simple = true
+
+  [privacy.youtube]
+    disabled = false
+    privacyEnhanced = true
+
+# ==============================================================================
+# Hugo 版本要求
+# ==============================================================================
+[module]
+  [module.hugoVersion]
+    extended = false
+    min = '0.146.0'
