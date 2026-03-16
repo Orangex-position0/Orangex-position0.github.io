@@ -35,7 +35,15 @@ jobs:
           # 使用 extended 版本（支持 SCSS/SASS）
           extended: true
 
-      # 3. 构建 Hugo 网站
+      # 3. 检查主题目录
+      - name: Check themes directory
+        run: |
+          echo "Checking themes directory..."
+          ls -la themes/
+          echo "Checking hugo.toml..."
+          grep theme hugo.toml || true
+
+      # 4. 构建 Hugo 网站
       - name: Build
         # --gc 清理未使用缓存
         # --minify 压缩 HTML/CSS/JS，减少页面体积
