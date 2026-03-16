@@ -4,7 +4,7 @@
 baseURL = 'https://Orangex-position0.github.io/'  # TODO: 替换 username 为你的 GitHub 用户名
 languageCode = 'zh-cn'
 title = '我的技术博客'
-theme = 'stack'
+theme = 'Stack'
 hasCJKLanguage = true  # 启用中日韩文字支持
 
 # ==============================================================================
