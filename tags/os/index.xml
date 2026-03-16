@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Os on 我的技术博客</title><link>https://Orangex-position0.github.io/tags/os/</link><description>Recent content in Os on 我的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 16 Mar 2026 14:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/os/index.xml" rel="self" type="application/rss+xml"/><item><title>操作系统基础：进程与线程</title><link>https://Orangex-position0.github.io/posts/computer-fundamentals/os-basics/</link><pubDate>Mon, 16 Mar 2026 14:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/computer-fundamentals/os-basics/</guid><description>&lt;h2 id="进程-process"&gt;进程 (Process)
+&lt;/h2&gt;&lt;p&gt;进程是操作系统分配资源的基本单位。&lt;/p&gt;
+&lt;h3 id="进程特征"&gt;进程特征
+&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;独立性：拥有独立的内存空间&lt;/li&gt;
+&lt;li&gt;动态性：动态创建、运行、消亡&lt;/li&gt;
+&lt;li&gt;并发性：多个进程可以并发执行&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="进程状态转换"&gt;进程状态转换
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;就绪 → 运行 → 阻塞
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ↑ ↓
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ←———————←——————
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="线程-thread"&gt;线程 (Thread)
+&lt;/h2&gt;&lt;p&gt;线程是 CPU 调度的基本单位，轻量级进程（LWP）。&lt;/p&gt;
+&lt;h3 id="线程特点"&gt;线程特点
+&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;共享进程资源（内存、文件等）&lt;/li&gt;
+&lt;li&gt;独立的执行流（寄存器、栈）&lt;/li&gt;
+&lt;li&gt;创建和切换开销小&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="进程-vs-线程"&gt;进程 vs 线程
+&lt;/h2&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;特性&lt;/th&gt;
+ &lt;th&gt;进程&lt;/th&gt;
+ &lt;th&gt;线程&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;资源共享&lt;/td&gt;
+ &lt;td&gt;独立&lt;/td&gt;
+ &lt;td&gt;共享&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;通信方式&lt;/td&gt;
+ &lt;td&gt;IPC（管道、消息队列等）&lt;/td&gt;
+ &lt;td&gt;共享内存&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;开销&lt;/td&gt;
+ &lt;td&gt;大&lt;/td&gt;
+ &lt;td&gt;小&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;安全性&lt;/td&gt;
+ &lt;td&gt;高（隔离）&lt;/td&gt;
+ &lt;td&gt;低（需同步）&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="总结"&gt;总结
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;进程是资源分配单位&lt;/li&gt;
+&lt;li&gt;线程是调度执行单位&lt;/li&gt;
+&lt;li&gt;现代应用通常采用多线程模型提高并发性能&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>
