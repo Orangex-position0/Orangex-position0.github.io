@@ -52,7 +52,7 @@ defaultContentLanguage = 'zh-cn'
 # ==============================================================================
 [params]
   # 网站描述（用于 SEO）
-  description = '分享技术文章，记录学习心得'
+  description = '一个后端程序员的分享欲发泄场所'
 
   # 主页配置
   [params.homepage]
@@ -63,7 +63,7 @@ defaultContentLanguage = 'zh-cn'
     [params.homepage.profile]
       avatarURL = '/img/avatar.png'  # 头像路径（需放在 static/img/ 目录下）
       title = '我的技术博客'
-      subtitle = '记录学习 | 分享知识 | 持续成长'
+      subtitle = '记录学习 | 分享知识 | 费曼学习法'
       social = true
       disableGrayscaleHover = false
 
@@ -93,6 +93,26 @@ defaultContentLanguage = 'zh-cn'
     position = 'left'
     # 文章页面显示侧边栏
     articles = true
+    # 头像路径（放在 assets/img/ 目录下，由 Hugo 资源系统处理）
+    avatar = 'img/avatar.jpg'
+    subtitle = '记录学习 | 分享知识 | 费曼学习法'
+
+  # 社交链接配置
+  [params.social]
+    # GitHub
+    [params.social.github]
+      name = 'GitHub'
+      url = 'https://github.com/Orangex-position0'
+
+    # Bilibili
+    [params.social.bilibili]
+      name = 'Bilibili'
+      url = 'https://space.bilibili.com/你的UID'
+
+    # Email
+    [params.social.email]
+      name = 'Email'
+      url = 'mailto:your-email@example.com'
 
   # 评论系统配置（选择一个启用）
   [params.comments]

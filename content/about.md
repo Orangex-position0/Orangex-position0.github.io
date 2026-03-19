@@ -26,8 +26,8 @@ description = '关于本站和博主'
 
 ## 联系方式
 
-- GitHub：[username](https://github.com/username)
-- Email：your-email@example.com
+- GitHub：[username](https://github.com/Orangex-position1)
+- Email：1640794497@qq.com
 
 ## 版权声明
 
