@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>重构 on 我的技术博客</title><link>https://Orangex-position0.github.io/tags/%E9%87%8D%E6%9E%84/</link><description>Recent content in 重构 on 我的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 24 Mar 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/%E9%87%8D%E6%9E%84/index.xml" rel="self" type="application/rss+xml"/><item><title>重构实战：打破依赖关系的两种核心方法</title><link>https://Orangex-position0.github.io/posts/refactoring/breaking-dependencies/</link><pubDate>Tue, 24 Mar 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/refactoring/breaking-dependencies/</guid><description>&lt;h2 id="一-背景--问题你的代码为什么难以测试"&gt;一、🎯 背景 &amp;amp; 问题：你的代码为什么难以测试？
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>重构 on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/%E9%87%8D%E6%9E%84/</link><description>Recent content in 重构 on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 24 Mar 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/%E9%87%8D%E6%9E%84/index.xml" rel="self" type="application/rss+xml"/><item><title>重构实战：打破依赖关系的两种核心方法</title><link>https://Orangex-position0.github.io/posts/refactoring/breaking-dependencies/</link><pubDate>Tue, 24 Mar 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/refactoring/breaking-dependencies/</guid><description>&lt;h2 id="一-背景--问题你的代码为什么难以测试"&gt;&lt;a href="#%e4%b8%80-%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98%e4%bd%a0%e7%9a%84%e4%bb%a3%e7%a0%81%e4%b8%ba%e4%bb%80%e4%b9%88%e9%9a%be%e4%bb%a5%e6%b5%8b%e8%af%95" class="header-anchor"&gt;&lt;/a&gt;一、🎯 背景 &amp;amp; 问题：你的代码为什么难以测试？
 &lt;/h2&gt;&lt;p&gt;在日常开发中，我们经常会遇到这样的困境：&lt;/p&gt;
 
  &lt;blockquote&gt;
@@ -32,7 +32,7 @@
 &lt;p&gt;&lt;strong&gt;本文目标&lt;/strong&gt;：通过两种实用的重构方法，让你的代码从&amp;quot;依赖具体实现&amp;quot;转变为&amp;quot;依赖抽象 + 可替换实现&amp;quot;，从而获得&lt;strong&gt;可独立测试的纯业务逻辑&lt;/strong&gt;。&lt;/p&gt;
 &lt;p&gt;💡 &lt;strong&gt;读完本文，你将学到&lt;/strong&gt;：两种常用的变更代码思路（如何解耦）&lt;/p&gt;
 &lt;hr&gt;
-&lt;h2 id="二-方案概述解耦的核心思想"&gt;二、🧩 方案概述：解耦的核心思想
+&lt;h2 id="二-方案概述解耦的核心思想"&gt;&lt;a href="#%e4%ba%8c-%e6%96%b9%e6%a1%88%e6%a6%82%e8%bf%b0%e8%a7%a3%e8%80%a6%e7%9a%84%e6%a0%b8%e5%bf%83%e6%80%9d%e6%83%b3" class="header-anchor"&gt;&lt;/a&gt;二、🧩 方案概述：解耦的核心思想
 &lt;/h2&gt;&lt;p&gt;打破依赖关系的本质是 &lt;strong&gt;解耦（Decoupling）&lt;/strong&gt;。&lt;/p&gt;
 &lt;p&gt;简单来说，就是让代码从：&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;调用方 --&amp;gt; 直接依赖具体实现
@@ -61,15 +61,15 @@
  &lt;/tbody&gt;
 &lt;/table&gt;
 &lt;hr&gt;
-&lt;h2 id="三-实现步骤"&gt;三、🛠️ 实现步骤
-&lt;/h2&gt;&lt;h3 id="-方法1方法拆分逻辑隔离"&gt;🔧 方法1：方法拆分（逻辑隔离）
+&lt;h2 id="三-实现步骤"&gt;&lt;a href="#%e4%b8%89-%e5%ae%9e%e7%8e%b0%e6%ad%a5%e9%aa%a4" class="header-anchor"&gt;&lt;/a&gt;三、🛠️ 实现步骤
+&lt;/h2&gt;&lt;h3 id="-方法1方法拆分逻辑隔离"&gt;&lt;a href="#-%e6%96%b9%e6%b3%951%e6%96%b9%e6%b3%95%e6%8b%86%e5%88%86%e9%80%bb%e8%be%91%e9%9a%94%e7%a6%bb" class="header-anchor"&gt;&lt;/a&gt;🔧 方法1：方法拆分（逻辑隔离）
 &lt;/h3&gt;&lt;p&gt;&lt;strong&gt;核心概念&lt;/strong&gt;：&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;📌 &lt;strong&gt;纯业务逻辑&lt;/strong&gt;：可直接测试的计算、校验等（无副作用）&lt;/li&gt;
 &lt;li&gt;🌊 &lt;strong&gt;副作用操作&lt;/strong&gt;：依赖外部系统的操作（数据库、网络、I/O）&lt;/li&gt;
 &lt;/ul&gt;
 &lt;p&gt;&lt;strong&gt;重构目标&lt;/strong&gt;：将大方法中的&amp;quot;纯业务逻辑&amp;quot;和&amp;quot;副作用操作&amp;quot;拆分，让核心逻辑可单独测试。&lt;/p&gt;
-&lt;h4 id="原始代码测试被数据库绑架"&gt;原始代码：测试被数据库绑架
+&lt;h4 id="原始代码测试被数据库绑架"&gt;&lt;a href="#%e5%8e%9f%e5%a7%8b%e4%bb%a3%e7%a0%81%e6%b5%8b%e8%af%95%e8%a2%ab%e6%95%b0%e6%8d%ae%e5%ba%93%e7%bb%91%e6%9e%b6" class="header-anchor"&gt;&lt;/a&gt;原始代码：测试被数据库绑架
 &lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;OrderService&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;checkout&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
@@ -87,7 +87,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;问题&lt;/strong&gt;：想测试&amp;quot;价格计算&amp;quot;，必须先连接数据库。&lt;/p&gt;
-&lt;h4 id="重构后职责分离"&gt;重构后：职责分离
+&lt;h4 id="重构后职责分离"&gt;&lt;a href="#%e9%87%8d%e6%9e%84%e5%90%8e%e8%81%8c%e8%b4%a3%e5%88%86%e7%a6%bb" class="header-anchor"&gt;&lt;/a&gt;重构后：职责分离
 &lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;OrderService&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;checkout&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
@@ -117,7 +117,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Database&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="na"&gt;save&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
-&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="单元测试无需数据库"&gt;单元测试：无需数据库
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="单元测试无需数据库"&gt;&lt;a href="#%e5%8d%95%e5%85%83%e6%b5%8b%e8%af%95%e6%97%a0%e9%9c%80%e6%95%b0%e6%8d%ae%e5%ba%93" class="header-anchor"&gt;&lt;/a&gt;单元测试：无需数据库
 &lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;org.junit.jupiter.api.Test&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kn"&gt;import static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;org.junit.jupiter.api.Assertions.*&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
@@ -141,14 +141,14 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;关键收益&lt;/strong&gt;：&lt;code&gt;calculateTotal&lt;/code&gt; 现在是一个&lt;strong&gt;纯函数（Pure Function）&lt;/strong&gt;——给定相同输入永远返回相同输出，且没有副作用，非常容易测试。&lt;/p&gt;
 &lt;p&gt;⭐ &lt;strong&gt;测试优势&lt;/strong&gt;：无需任何 Mock 框架，直接调用即可验证&lt;/p&gt;
 &lt;hr&gt;
-&lt;h3 id="-方法2引入中介依赖倒置"&gt;🔄 方法2：引入中介（依赖倒置）
+&lt;h3 id="-方法2引入中介依赖倒置"&gt;&lt;a href="#-%e6%96%b9%e6%b3%952%e5%bc%95%e5%85%a5%e4%b8%ad%e4%bb%8b%e4%be%9d%e8%b5%96%e5%80%92%e7%bd%ae" class="header-anchor"&gt;&lt;/a&gt;🔄 方法2：引入中介（依赖倒置）
 &lt;/h3&gt;&lt;p&gt;当依赖关系跨越类边界时，方法拆分就不够用了。这时需要引入一个**中介（接口）**来替代具体实现，让依赖&amp;quot;可替换&amp;quot;。&lt;/p&gt;
 &lt;p&gt;这就是 &lt;strong&gt;依赖倒置原则（Dependency Inversion Principle）&lt;/strong&gt; 的实践：&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;📌 高层模块不应依赖低层模块，两者都应依赖抽象&lt;/li&gt;
 &lt;li&gt;📌 抽象不应依赖细节，细节应依赖抽象&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h4 id="原始代码硬编码依赖"&gt;原始代码：硬编码依赖
+&lt;h4 id="原始代码硬编码依赖"&gt;&lt;a href="#%e5%8e%9f%e5%a7%8b%e4%bb%a3%e7%a0%81%e7%a1%ac%e7%bc%96%e7%a0%81%e4%be%9d%e8%b5%96" class="header-anchor"&gt;&lt;/a&gt;原始代码：硬编码依赖
 &lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;UserService&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// ❌ 硬编码依赖具体实现（强耦合）&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;RealEmailSender&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;emailSender&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;RealEmailSender&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
@@ -161,7 +161,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;测试困境&lt;/strong&gt;：测试 &lt;code&gt;registerUser&lt;/code&gt; 时会真的发送邮件，既慢又有副作用。&lt;/p&gt;
-&lt;h4 id="重构步骤"&gt;重构步骤
+&lt;h4 id="重构步骤"&gt;&lt;a href="#%e9%87%8d%e6%9e%84%e6%ad%a5%e9%aa%a4" class="header-anchor"&gt;&lt;/a&gt;重构步骤
 &lt;/h4&gt;&lt;p&gt;&lt;strong&gt;Step 1：定义抽象（接口）&lt;/strong&gt;&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cm"&gt;/**
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cm"&gt; * 抽象：定义&amp;#34;发送邮件&amp;#34;的能力，而不是具体实现
@@ -227,7 +227,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 记录类&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;record&lt;/span&gt; &lt;span class="nc"&gt;EmailRecord&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;to&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;subject&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;content&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
-&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="单元测试完全隔离外部依赖"&gt;单元测试：完全隔离外部依赖
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="单元测试完全隔离外部依赖"&gt;&lt;a href="#%e5%8d%95%e5%85%83%e6%b5%8b%e8%af%95%e5%ae%8c%e5%85%a8%e9%9a%94%e7%a6%bb%e5%a4%96%e9%83%a8%e4%be%9d%e8%b5%96" class="header-anchor"&gt;&lt;/a&gt;单元测试：完全隔离外部依赖
 &lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kn"&gt;import&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;org.junit.jupiter.api.Test&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kn"&gt;import static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nn"&gt;org.junit.jupiter.api.Assertions.*&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
@@ -255,8 +255,8 @@
 &lt;li&gt;🔍 验证行为：可以精确验证 &lt;code&gt;EmailProvider.send()&lt;/code&gt; 是否被调用&lt;/li&gt;
 &lt;/ul&gt;
 &lt;hr&gt;
-&lt;h2 id="四-实战示例--踩坑指南"&gt;四、💡 实战示例 &amp;amp; 踩坑指南
-&lt;/h2&gt;&lt;h3 id="综合案例订单处理服务"&gt;综合案例：订单处理服务
+&lt;h2 id="四-实战示例--踩坑指南"&gt;&lt;a href="#%e5%9b%9b-%e5%ae%9e%e6%88%98%e7%a4%ba%e4%be%8b--%e8%b8%a9%e5%9d%91%e6%8c%87%e5%8d%97" class="header-anchor"&gt;&lt;/a&gt;四、💡 实战示例 &amp;amp; 踩坑指南
+&lt;/h2&gt;&lt;h3 id="综合案例订单处理服务"&gt;&lt;a href="#%e7%bb%bc%e5%90%88%e6%a1%88%e4%be%8b%e8%ae%a2%e5%8d%95%e5%a4%84%e7%90%86%e6%9c%8d%e5%8a%a1" class="header-anchor"&gt;&lt;/a&gt;综合案例：订单处理服务
 &lt;/h3&gt;&lt;p&gt;让我们看一个更复杂的例子，结合两种方法：&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cm"&gt;/**
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cm"&gt; * 重构后的订单处理服务：完全可测试
@@ -313,7 +313,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderResult&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;paymentFailed&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;payment&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getErrorMessage&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
 &lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
-&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h3 id="常见陷阱--解决方案"&gt;常见陷阱 &amp;amp; 解决方案
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h3 id="常见陷阱--解决方案"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e9%99%b7%e9%98%b1--%e8%a7%a3%e5%86%b3%e6%96%b9%e6%a1%88" class="header-anchor"&gt;&lt;/a&gt;常见陷阱 &amp;amp; 解决方案
 &lt;/h3&gt;&lt;table&gt;
  &lt;thead&gt;
  &lt;tr&gt;
@@ -345,7 +345,7 @@
  &lt;/tr&gt;
  &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;h3 id="测试策略选择"&gt;测试策略选择
+&lt;h3 id="测试策略选择"&gt;&lt;a href="#%e6%b5%8b%e8%af%95%e7%ad%96%e7%95%a5%e9%80%89%e6%8b%a9" class="header-anchor"&gt;&lt;/a&gt;测试策略选择
 &lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;┌─────────────────────────────────────────────────────────┐
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ 纯业务逻辑（calculateTotal, validateOrder） │
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── 直接测试，无需任何 Mock/Fake │
@@ -358,8 +358,8 @@
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── 使用 Fake 验证交互行为 │
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;└─────────────────────────────────────────────────────────┘
 &lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;hr&gt;
-&lt;h2 id="五-总结"&gt;五、📋 总结
-&lt;/h2&gt;&lt;h3 id="核心要点回顾"&gt;核心要点回顾
+&lt;h2 id="五-总结"&gt;&lt;a href="#%e4%ba%94-%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;五、📋 总结
+&lt;/h2&gt;&lt;h3 id="核心要点回顾"&gt;&lt;a href="#%e6%a0%b8%e5%bf%83%e8%a6%81%e7%82%b9%e5%9b%9e%e9%a1%be" class="header-anchor"&gt;&lt;/a&gt;核心要点回顾
 &lt;/h3&gt;&lt;p&gt;&lt;strong&gt;为什么要打破依赖&lt;/strong&gt;：让代码可测试、可维护，将业务逻辑与副作用分离&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;两种核心方法&lt;/strong&gt;：&lt;/p&gt;
 &lt;ul&gt;
@@ -372,7 +372,7 @@
 &lt;li&gt;构造函数注入依赖&lt;/li&gt;
 &lt;li&gt;优先使用可独立测试的纯函数&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h3 id="重构决策流程"&gt;重构决策流程
+&lt;h3 id="重构决策流程"&gt;&lt;a href="#%e9%87%8d%e6%9e%84%e5%86%b3%e7%ad%96%e6%b5%81%e7%a8%8b" class="header-anchor"&gt;&lt;/a&gt;重构决策流程
 &lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;开始
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ▼
@@ -384,7 +384,7 @@
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ▼
 &lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;结束（代码已足够清晰）
 &lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;💡 &lt;strong&gt;实践建议&lt;/strong&gt;：下次写代码时，先问自己——&amp;ldquo;这个方法能脱离数据库运行测试吗？&amp;ldquo;如果不能，也许就是重构的时候了。&lt;/p&gt;
-&lt;h2 id="六-参考"&gt;六、📚 参考
+&lt;h2 id="六-参考"&gt;&lt;a href="#%e5%85%ad-%e5%8f%82%e8%80%83" class="header-anchor"&gt;&lt;/a&gt;六、📚 参考
 &lt;/h2&gt;&lt;ul&gt;
 &lt;li&gt;&lt;a class="link" href="https://book.douban.com/subject/36457109/" target="_blank" rel="noopener"
  &gt;程序员的README (豆瓣)&lt;/a&gt; - 第二章的部分内容&lt;/li&gt;

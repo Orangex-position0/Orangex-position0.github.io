@@ -1,12 +1,12 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Distributed-Systems on 我的技术博客</title><link>https://Orangex-position0.github.io/tags/distributed-systems/</link><description>Recent content in Distributed-Systems on 我的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 16 Mar 2026 13:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/distributed-systems/index.xml" rel="self" type="application/rss+xml"/><item><title>CAP 定理：分布式系统的权衡</title><link>https://Orangex-position0.github.io/posts/distributed-systems/cap-theorem/</link><pubDate>Mon, 16 Mar 2026 13:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/distributed-systems/cap-theorem/</guid><description>&lt;h2 id="cap-定理"&gt;CAP 定理
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Distributed-Systems on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/distributed-systems/</link><description>Recent content in Distributed-Systems on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 16 Mar 2026 13:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/distributed-systems/index.xml" rel="self" type="application/rss+xml"/><item><title>CAP 定理：分布式系统的权衡</title><link>https://Orangex-position0.github.io/posts/distributed-systems/cap-theorem/</link><pubDate>Mon, 16 Mar 2026 13:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/distributed-systems/cap-theorem/</guid><description>&lt;h2 id="cap-定理"&gt;&lt;a href="#cap-%e5%ae%9a%e7%90%86" class="header-anchor"&gt;&lt;/a&gt;CAP 定理
 &lt;/h2&gt;&lt;p&gt;CAP 定理指出，分布式系统最多只能同时满足以下三个特性中的两个：&lt;/p&gt;
-&lt;h3 id="一致性-consistency"&gt;一致性 (Consistency)
+&lt;h3 id="一致性-consistency"&gt;&lt;a href="#%e4%b8%80%e8%87%b4%e6%80%a7-consistency" class="header-anchor"&gt;&lt;/a&gt;一致性 (Consistency)
 &lt;/h3&gt;&lt;p&gt;所有节点在同一时间看到相同的数据。&lt;/p&gt;
-&lt;h3 id="可用性-availability"&gt;可用性 (Availability)
+&lt;h3 id="可用性-availability"&gt;&lt;a href="#%e5%8f%af%e7%94%a8%e6%80%a7-availability" class="header-anchor"&gt;&lt;/a&gt;可用性 (Availability)
 &lt;/h3&gt;&lt;p&gt;每个请求都能得到响应（成功或失败），保证系统持续服务。&lt;/p&gt;
-&lt;h3 id="分区容错性-partition-tolerance"&gt;分区容错性 (Partition Tolerance)
+&lt;h3 id="分区容错性-partition-tolerance"&gt;&lt;a href="#%e5%88%86%e5%8c%ba%e5%ae%b9%e9%94%99%e6%80%a7-partition-tolerance" class="header-anchor"&gt;&lt;/a&gt;分区容错性 (Partition Tolerance)
 &lt;/h3&gt;&lt;p&gt;系统在网络分区的情况下仍能继续运行。&lt;/p&gt;
-&lt;h2 id="三种权衡组合"&gt;三种权衡组合
+&lt;h2 id="三种权衡组合"&gt;&lt;a href="#%e4%b8%89%e7%a7%8d%e6%9d%83%e8%a1%a1%e7%bb%84%e5%90%88" class="header-anchor"&gt;&lt;/a&gt;三种权衡组合
 &lt;/h2&gt;&lt;table&gt;
  &lt;thead&gt;
  &lt;tr&gt;
@@ -33,14 +33,14 @@
  &lt;/tr&gt;
  &lt;/tbody&gt;
 &lt;/table&gt;
-&lt;h2 id="base-理论"&gt;BASE 理论
+&lt;h2 id="base-理论"&gt;&lt;a href="#base-%e7%90%86%e8%ae%ba" class="header-anchor"&gt;&lt;/a&gt;BASE 理论
 &lt;/h2&gt;&lt;p&gt;CAP 的替代方案：&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;strong&gt;Basically Available&lt;/strong&gt;：基本可用&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;Soft state&lt;/strong&gt;：软状态&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;Eventually consistent&lt;/strong&gt;：最终一致性&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h2 id="总结"&gt;总结
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
 &lt;/h2&gt;&lt;p&gt;在设计分布式系统时，需要根据业务场景选择合适的权衡：&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;金融交易：优先保证一致性（CP）&lt;/li&gt;
