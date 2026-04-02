@@ -1,0 +1,8 @@
+// 头像强制等比裁剪为正圆
+.sidebar-avatar,
+.site-avatar {
+    img {
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+    }
+}
