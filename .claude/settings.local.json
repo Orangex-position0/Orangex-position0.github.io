@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(echo:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(hugo server:*)",
+      "Bash(hugo --gc --minify)"
     ]
   }
 }
