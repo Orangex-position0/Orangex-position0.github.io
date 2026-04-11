@@ -162,6 +162,19 @@ defaultContentLanguage = 'zh-cn'
       enabled = true
       default = 'Licensed under CC BY-NC-SA 4.0'
 
+  # 不蒜子访问统计
+  [params.busuanzi]
+    enable = true
+    site_pv = true
+    site_pv_pre = '<i class="fa fa-eye"></i> '
+    site_pv_post = ' 次访问'
+    site_uv = true
+    site_uv_pre = '<i class="fa fa-user"></i> '
+    site_uv_post = ' 位访客'
+    page_pv = true
+    page_pv_pre = '<i class="far fa-eye"></i> '
+    page_pv_post = ' 次阅读'
+
   # 评论系统
   [params.comments]
     enabled = false

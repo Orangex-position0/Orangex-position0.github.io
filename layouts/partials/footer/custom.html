@@ -1,0 +1,27 @@
+{{- if .Site.Params.busuanzi.enable -}}
+<script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+{{- if or .Site.Params.busuanzi.site_pv .Site.Params.busuanzi.site_uv -}}
+<section class="busuanzi-footer">
+    {{- if .Site.Params.busuanzi.site_pv -}}
+    <span id="busuanzi_container_value_site_pv">
+        {{- with .Site.Params.busuanzi.site_pv_pre -}}{{ . | safeHTML }}{{- end -}}
+        <span id="busuanzi_value_site_pv"></span>
+        {{- with .Site.Params.busuanzi.site_pv_post -}}{{ . | safeHTML }}{{- end -}}
+    </span>
+    {{- end -}}
+
+    {{- if and .Site.Params.busuanzi.site_pv .Site.Params.busuanzi.site_uv -}}
+    &nbsp;|&nbsp;
+    {{- end -}}
+
+    {{- if .Site.Params.busuanzi.site_uv -}}
+    <span id="busuanzi_container_value_site_uv">
+        {{- with .Site.Params.busuanzi.site_uv_pre -}}{{ . | safeHTML }}{{- end -}}
+        <span id="busuanzi_value_site_uv"></span>
+        {{- with .Site.Params.busuanzi.site_uv_post -}}{{ . | safeHTML }}{{- end -}}
+    </span>
+    {{- end -}}
+</section>
+{{- end -}}
+{{- end -}}
