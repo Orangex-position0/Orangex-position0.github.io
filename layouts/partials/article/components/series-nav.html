@@ -1,0 +1,21 @@
+{{- $currentPath := .File.Path -}}
+{{- range $_, $taxonomy := .Site.Taxonomies.series -}}
+  {{- range $taxonomy.Pages -}}
+    {{- if eq .File.Path $currentPath -}}
+      {{- $sorted := sort $taxonomy.Pages ".Params.seriesWeight" "asc" -}}
+      <aside>
+        <h2 class="section-title">本系列文章</h2>
+        <style>.article-series-nav{display:flex;flex-direction:column;gap:.25rem}.article-series-nav__link{color:var(--card-text-color-main);text-decoration:none;font-size:1.25rem;line-height:1.6}.article-series-nav__link:hover{color:var(--accent-color)}.article-series-nav__link.active{font-weight:600;color:var(--accent-color)}</style>
+        <div class="article-series-nav">
+          {{- range $sorted -}}
+            {{- if eq .File.Path $currentPath -}}
+              <a class="article-series-nav__link active" href="{{ .RelPermalink }}">{{ .Title }}</a>
+            {{- else -}}
+              <a class="article-series-nav__link" href="{{ .RelPermalink }}">{{ .Title }}</a>
+            {{- end -}}
+          {{- end -}}
+        </div>
+      </aside>
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
