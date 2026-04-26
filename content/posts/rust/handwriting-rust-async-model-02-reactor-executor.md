@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（二）：Reactor-Executor 模型'
 date = 2026-04-26T11:00:00+08:00
-draft = true
+draft = false
 description = '引入事件驱动架构，手写 Waker、Reactor、Executor 三大组件，实现真正的非阻塞异步运行时'
 categories = ['rust']
 tags = ['rust', 'async', 'reactor-executor']

@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（五）：async/await 揭秘'
 date = 2026-04-26T14:00:00+08:00
-draft = true
+draft = false
 description = '手写多步状态机并与 async/await 版本对比，揭示编译器语法糖背后的真相'
 categories = ['rust']
 tags = ['rust', 'async', 'state-machine', 'compiler']

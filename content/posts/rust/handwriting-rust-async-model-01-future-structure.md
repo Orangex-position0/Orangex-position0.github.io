@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（一）：简易版 Future 结构'
 date = 2026-04-26T10:00:00+08:00
-draft = true
+draft = false
 description = '从阻塞式编程的痛点出发，手写一个最简单的 Future Trait 和状态机，理解 Rust 异步编程的最底层抽象'
 categories = ['rust']
 tags = ['rust', 'async']

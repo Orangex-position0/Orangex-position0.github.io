@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（四）：自引用和 Pin'
 date = 2026-04-26T13:00:00+08:00
-draft = true
+draft = false
 description = '为什么 async 需要固定内存地址？从自引用结构的问题出发，理解 PhantomPinned 和 Pin 的设计'
 categories = ['rust']
 tags = ['rust', 'async', 'self-referential']

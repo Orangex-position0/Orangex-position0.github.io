@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（六）：与 Tokio 相比'
 date = 2026-04-26T15:00:00+08:00
-draft = true
+draft = false
 description = '将手写的简易异步运行时与生产级 Tokio 逐项对比，看清差距与学习方向'
 categories = ['rust']
 tags = ['rust', 'async', 'tokio']

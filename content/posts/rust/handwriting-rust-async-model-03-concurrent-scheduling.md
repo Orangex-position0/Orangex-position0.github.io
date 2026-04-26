@@ -1,7 +1,7 @@
 +++
 title = '手写 Rust Async Model（三）：并发任务调度'
 date = 2026-04-26T12:00:00+08:00
-draft = true
+draft = false
 description = '实现 JoinAll、Then、Select 三种 Future 组合器，掌握并发任务调度的核心模式'
 categories = ['rust']
 tags = ['rust', 'async']
