@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Tokio on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/tokio/</link><description>Recent content in Tokio on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sun, 26 Apr 2026 15:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/tokio/index.xml" rel="self" type="application/rss+xml"/><item><title>手写 Rust Async Model（六）：与 Tokio 相比</title><link>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</link><pubDate>Sun, 26 Apr 2026 15:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</guid><description>&lt;h2 id="背景--问题我们做到了哪一步"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98%e6%88%91%e4%bb%ac%e5%81%9a%e5%88%b0%e4%ba%86%e5%93%aa%e4%b8%80%e6%ad%a5" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题：我们做到了哪一步？
+&lt;/h2&gt;&lt;p&gt;前面的五章，我们从零开始手写了一个简化版的 Rust 异步运行时：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Future Trait&lt;/strong&gt;：定义了异步任务的标准协议&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Reactor-Executor 模型&lt;/strong&gt;：实现了事件驱动的任务调度&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;组合器&lt;/strong&gt;：实现了 JoinAll、Then、Select 三种并发控制模式&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Pin&lt;/strong&gt;：解决了自引用结构的内存安全问题&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;async/await&lt;/strong&gt;：揭示了编译器语法糖的本质&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;但我们的实现只是一个&lt;strong&gt;教学级别的最小可行版本&lt;/strong&gt;。与生产级运行时 Tokio 相比，还有很大的差距。这一章我们逐项对比，看清差距，也明确学习方向。&lt;/p&gt;
+&lt;h2 id="方案逐项对比"&gt;&lt;a href="#%e6%96%b9%e6%a1%88%e9%80%90%e9%a1%b9%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;方案：逐项对比
+&lt;/h2&gt;&lt;p&gt;我们从 Future Trait、Executor、Waker 三个维度，对比手写版与 Tokio 的差异。&lt;/p&gt;
+&lt;h3 id="future-trait-对比"&gt;&lt;a href="#future-trait-%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;Future Trait 对比
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// ===== 手写的版本 =====
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;MyFuture&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt; &lt;span class="nc"&gt;Output&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;poll&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;waker&lt;/span&gt;: &lt;span class="kp"&gt;&amp;amp;&lt;/span&gt;&lt;span class="nc"&gt;Waker&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;-&amp;gt; &lt;span class="nc"&gt;PollState&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="bp"&gt;Self&lt;/span&gt;::&lt;span class="n"&gt;Output&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// ===== 标准库版本 =====
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt; &lt;span class="nc"&gt;Output&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;poll&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;: &lt;span class="nc"&gt;Pin&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;Self&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cx&lt;/span&gt;: &lt;span class="kp"&gt;&amp;amp;&lt;/span&gt;&lt;span class="nc"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Context&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nb"&gt;&amp;#39;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;-&amp;gt; &lt;span class="nc"&gt;Poll&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="bp"&gt;Self&lt;/span&gt;::&lt;span class="n"&gt;Output&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;差异&lt;/th&gt;
+ &lt;th&gt;我们的 MyFuture&lt;/th&gt;
+ &lt;th&gt;std::future::Future&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;self 类型&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;&amp;amp;mut self&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;Pin&amp;lt;&amp;amp;mut Self&amp;gt;&lt;/code&gt;&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;通知参数&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;waker: &amp;amp;Waker&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;cx: &amp;amp;mut Context&amp;lt;'_&amp;gt;&lt;/code&gt;&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;返回类型&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;PollState&amp;lt;T&amp;gt;&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;Poll&amp;lt;T&amp;gt;&lt;/code&gt;&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;状态枚举&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;Ready(T)&lt;/code&gt; / &lt;code&gt;Pending&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;Ready(T)&lt;/code&gt; / &lt;code&gt;Pending&lt;/code&gt;&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;两个关键差异：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Pin&amp;lt;&amp;amp;mut Self&amp;gt;&lt;/code&gt;&lt;/strong&gt;：保证自引用结构在 &lt;code&gt;poll&lt;/code&gt; 过程中不会被 move（第四章讲过）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;Context&amp;lt;'_&amp;gt;&lt;/code&gt;&lt;/strong&gt;：提供扩展性。多一层包装后，如果未来需要在 &lt;code&gt;poll&lt;/code&gt; 中传递额外信息（如调度器优先级、任务元数据），只需在 &lt;code&gt;Context&lt;/code&gt; 中添加新方法即可，不用改 &lt;code&gt;poll&lt;/code&gt; 的签名&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="executor-对比"&gt;&lt;a href="#executor-%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;Executor 对比
+&lt;/h3&gt;&lt;p&gt;我们的手写版相当于 MVP 版 Executor——能跑，但功能最少。Tokio 在我们基础上增加了大量生产级能力：&lt;/p&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;能力&lt;/th&gt;
+ &lt;th&gt;我们的 Executor&lt;/th&gt;
+ &lt;th&gt;tokio&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;线程模型&lt;/td&gt;
+ &lt;td&gt;单线程或固定线程&lt;/td&gt;
+ &lt;td&gt;多线程 + work-stealing&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;I/O 后端&lt;/td&gt;
+ &lt;td&gt;epoll（通过 mio）&lt;/td&gt;
+ &lt;td&gt;epoll + io_uring（可选）&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;定时器&lt;/td&gt;
+ &lt;td&gt;不支持&lt;/td&gt;
+ &lt;td&gt;Timer Wheel 实现&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;任务取消&lt;/td&gt;
+ &lt;td&gt;不支持&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;JoinHandle::abort()&lt;/code&gt;&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;优雅关闭&lt;/td&gt;
+ &lt;td&gt;不支持&lt;/td&gt;
+ &lt;td&gt;优雅等待所有任务完成&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;信号处理&lt;/td&gt;
+ &lt;td&gt;不支持&lt;/td&gt;
+ &lt;td&gt;Unix 信号 / Windows 事件&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;文件 I/O&lt;/td&gt;
+ &lt;td&gt;不支持&lt;/td&gt;
+ &lt;td&gt;基于 blocking 线程池的异步文件操作&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;几个值得关注的点：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;work-stealing&lt;/strong&gt;：我们的 Executor 任务绑定在创建它的线程上，不能跨线程迁移。Tokio 使用工作窃取算法——空闲线程可以从忙碌线程&amp;quot;偷&amp;quot;任务，实现负载均衡&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;io_uring&lt;/strong&gt;：Linux 5.1+ 提供的全新异步 I/O 接口，相比 epoll 有更好的性能，Tokio 已支持&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Timer Wheel&lt;/strong&gt;：高效定时器数据结构，支持大量定时任务的插入和过期检查，时间复杂度为 O(1)&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;任务取消&lt;/strong&gt;：我们的实现中，Future 一旦启动就只能等它完成。Tokio 支持通过 &lt;code&gt;JoinHandle::abort()&lt;/code&gt; 主动取消任务&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="waker-对比"&gt;&lt;a href="#waker-%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;Waker 对比
+&lt;/h3&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;差异&lt;/th&gt;
+ &lt;th&gt;我们的 Waker&lt;/th&gt;
+ &lt;th&gt;Tokio 的 Waker&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;唤醒方式&lt;/td&gt;
+ &lt;td&gt;&lt;code&gt;thread::unpark&lt;/code&gt;&lt;/td&gt;
+ &lt;td&gt;原子计数 + unpark&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;跨线程&lt;/td&gt;
+ &lt;td&gt;支持（Thread handle）&lt;/td&gt;
+ &lt;td&gt;支持（原子操作）&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;性能&lt;/td&gt;
+ &lt;td&gt;每次唤醒都需要获取锁&lt;/td&gt;
+ &lt;td&gt;无锁设计&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;实现复杂度&lt;/td&gt;
+ &lt;td&gt;简单直接&lt;/td&gt;
+ &lt;td&gt;实现复杂&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;我们的 Waker 用 &lt;code&gt;Arc&amp;lt;Mutex&amp;lt;VecDeque&amp;gt;&amp;gt;&lt;/code&gt; 存储就绪队列，每次 &lt;code&gt;wake()&lt;/code&gt; 都需要获取锁。Tokio 的 Waker 使用原子计数实现无锁唤醒，在高并发场景下性能优势明显——但实现复杂度也高得多。&lt;/p&gt;
+&lt;h2 id="示例--踩坑"&gt;&lt;a href="#%e7%a4%ba%e4%be%8b--%e8%b8%a9%e5%9d%91" class="header-anchor"&gt;&lt;/a&gt;示例 &amp;amp; 踩坑
+&lt;/h2&gt;&lt;h3 id="我们实现了什么"&gt;&lt;a href="#%e6%88%91%e4%bb%ac%e5%ae%9e%e7%8e%b0%e4%ba%86%e4%bb%80%e4%b9%88" class="header-anchor"&gt;&lt;/a&gt;我们实现了什么
+&lt;/h3&gt;&lt;p&gt;虽然与 Tokio 差距很大，但我们的手写版本覆盖了异步运行时的&lt;strong&gt;核心概念&lt;/strong&gt;：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Future（状态机）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → PollState（状态枚举）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → Waker（通知机制）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → Reactor（事件监听）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → Executor（任务调度）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → 组合器（并发控制）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → Pin（内存安全）
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; → async/await（语法糖）
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;理解了这些概念，再看 Tokio 的源码或文档就不会觉得陌生。Tokio 的每一个模块都可以对应到我们手写的某个组件：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;tokio::runtime::Runtime&lt;/code&gt; → 我们的 &lt;code&gt;Executor&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;tokio::net&lt;/code&gt; → 我们的 &lt;code&gt;Reactor&lt;/code&gt;（但用 mio/io_uring 替代了 &lt;code&gt;thread::sleep&lt;/code&gt;）&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;std::future::Future&lt;/code&gt; → 我们的 &lt;code&gt;MyFuture&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;std::task::Waker&lt;/code&gt; → 我们的 &lt;code&gt;Waker&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;futures::join!&lt;/code&gt; → 我们的 &lt;code&gt;JoinAll&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;futures::select!&lt;/code&gt; → 我们的 &lt;code&gt;Select&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="下一步学习方向"&gt;&lt;a href="#%e4%b8%8b%e4%b8%80%e6%ad%a5%e5%ad%a6%e4%b9%a0%e6%96%b9%e5%90%91" class="header-anchor"&gt;&lt;/a&gt;下一步学习方向
+&lt;/h3&gt;&lt;p&gt;如果你想继续深入 Rust 异步编程，以下资源值得一读：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://tokio.rs/tokio/tutorial" target="_blank" rel="noopener"
+ &gt;Tokio 官方教程&lt;/a&gt; — 从零开始学习 Tokio，涵盖异步文件 I/O、网络编程、通道、信号处理等实用主题&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://rust-lang.github.io/async-book/" target="_blank" rel="noopener"
+ &gt;Rust Async Book&lt;/a&gt; — Rust 官方异步编程书籍，深入讲解 Future、async/await、Pin、Waker 等核心概念&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://doc.rust-lang.org/std/future/trait.Future.html" target="_blank" rel="noopener"
+ &gt;std::future::Future 文档&lt;/a&gt; — 标准库 Future trait 的官方文档，包含完整的 API 说明和示例&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
+&lt;/h2&gt;&lt;p&gt;经过六章的循序渐进，我们从阻塞式编程的问题出发，一步步手写了 Rust 异步运行时的核心组件：&lt;/p&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;章节&lt;/th&gt;
+ &lt;th&gt;内容&lt;/th&gt;
+ &lt;th&gt;核心收获&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;一&lt;/td&gt;
+ &lt;td&gt;Future 结构&lt;/td&gt;
+ &lt;td&gt;Future 是被动状态机，&lt;code&gt;poll()&lt;/code&gt; 驱动前进&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;二&lt;/td&gt;
+ &lt;td&gt;Reactor-Executor&lt;/td&gt;
+ &lt;td&gt;事件驱动取代盲目轮询，Waker 连接事件与调度&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;三&lt;/td&gt;
+ &lt;td&gt;并发调度&lt;/td&gt;
+ &lt;td&gt;JoinAll/Then/Select 三种组合器模式&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;四&lt;/td&gt;
+ &lt;td&gt;Pin&lt;/td&gt;
+ &lt;td&gt;禁止 move 保护自引用结构&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;五&lt;/td&gt;
+ &lt;td&gt;async/await&lt;/td&gt;
+ &lt;td&gt;编译器生成的状态机语法糖&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;六&lt;/td&gt;
+ &lt;td&gt;与 Tokio 对比&lt;/td&gt;
+ &lt;td&gt;看清教学版与生产级的差距&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;手写的目的不是造轮子，而是&lt;strong&gt;理解轮子的构造原理&lt;/strong&gt;。当你理解了每一层抽象为什么存在、解决了什么问题之后，再使用 Tokio 这样的生产级框架时，就能做到知其然也知其所以然。&lt;/p&gt;</description></item></channel></rss>
