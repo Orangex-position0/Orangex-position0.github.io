@@ -1,7 +1,7 @@
 +++
 title = '使用 CQRS 处理读写分离架构'
 date = 2026-05-05T10:00:00+08:00
-draft = true
+draft = false
 description = '介绍 CQRS 架构模式的核心思想、五种设计原则、三种演进层次，以及电商订单系统的完整实践案例'
 categories = ['distributed-systems']
 tags = ['CQRS', '架构模式', 'DDD', '读写分离', '事件驱动']
