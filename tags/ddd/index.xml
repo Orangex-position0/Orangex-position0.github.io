@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>DDD on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/ddd/</link><description>Recent content in DDD on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 05 May 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/ddd/index.xml" rel="self" type="application/rss+xml"/><item><title>使用 CQRS 处理读写分离架构</title><link>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</link><pubDate>Tue, 05 May 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</guid><description>&lt;h2 id="背景--问题"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题
+&lt;/h2&gt;&lt;p&gt;在传统架构中，单个数据模型通常兼顾读和写的职责。但随着系统规模扩展，读和写操作在性能和扩展性上呈现出明显的不对称性：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;数据表示不匹配&lt;/strong&gt;：写入时需要的字段结构与读取时需要的展示形式往往不同。例如，创建订单需要商品 ID 列表，但查询订单详情时用户希望看到商品名称和价格&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;锁竞争严重&lt;/strong&gt;：读操作和写操作共享同一份数据，复杂查询（join / 聚合 / 过滤）会长时间占用连接，阻塞写操作&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;性能无法兼顾&lt;/strong&gt;：写入追求强一致性和事务安全，读取追求高并发和低延迟，两者的优化方向天然矛盾&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这些问题的本质是：&lt;strong&gt;单一数据模型无法同时高效满足读与写需求&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;本文将介绍 CQRS（Command Query Responsibility Segregation）模式，说明它如何通过读写职责分离来解决上述问题，并给出从简单到复杂的三种演进方案和完整的电商订单系统案例。&lt;/p&gt;
+&lt;h3 id="前置知识"&gt;&lt;a href="#%e5%89%8d%e7%bd%ae%e7%9f%a5%e8%af%86" class="header-anchor"&gt;&lt;/a&gt;前置知识
+&lt;/h3&gt;&lt;p&gt;阅读本文需要了解以下概念（不熟悉也没关系，文中会配合上下文说明）：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;领域驱动设计（DDD）&lt;/strong&gt;：一种以业务领域为核心组织代码的方法论，强调领域模型和业务规则的封装&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;领域模型（Domain Model）&lt;/strong&gt;：面向业务的对象模型，包含实体、值对象和聚合根，封装业务规则&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;领域事件（Domain Event）&lt;/strong&gt;：表示领域中发生的重要事情（如&amp;quot;订单已创建&amp;quot;），用于解耦不同模块之间的通信&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;聚合根（Aggregate Root）&lt;/strong&gt;：一组相关对象的入口点，保证业务规则的一致性边界&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="方案或原理"&gt;&lt;a href="#%e6%96%b9%e6%a1%88%e6%88%96%e5%8e%9f%e7%90%86" class="header-anchor"&gt;&lt;/a&gt;方案或原理
+&lt;/h2&gt;&lt;h3 id="cqrs-是什么"&gt;&lt;a href="#cqrs-%e6%98%af%e4%bb%80%e4%b9%88" class="header-anchor"&gt;&lt;/a&gt;CQRS 是什么
+&lt;/h3&gt;&lt;p&gt;CQRS（Command Query Responsibility Segregation）是一种架构模式，核心思想是：&lt;strong&gt;将修改数据的操作（Command）和读取数据的操作（Query）彻底解耦&lt;/strong&gt;，使用不同的模型、流程和存储来分别服务。&lt;/p&gt;
+&lt;p&gt;简单来说，就是让&amp;quot;写&amp;quot;和&amp;quot;读&amp;quot;各走各的路，各自优化。&lt;/p&gt;
+&lt;h3 id="优缺点"&gt;&lt;a href="#%e4%bc%98%e7%bc%ba%e7%82%b9" class="header-anchor"&gt;&lt;/a&gt;优缺点
+&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;优势：&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;写操作聚焦强一致性和业务规则，读操作聚焦高并发和数据展示&lt;/li&gt;
+&lt;li&gt;读写可独立扩容，读模型可以使用缓存、搜索引擎等专门优化&lt;/li&gt;
+&lt;li&gt;降低单个模型的复杂度，职责更清晰&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;代价：&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;需要维护两套模型，开发成本和学习成本增加&lt;/li&gt;
+&lt;li&gt;读模型通常异步更新，存在数据延迟（最终一致性）&lt;/li&gt;
+&lt;li&gt;事件同步、消息队列等基础设施需要额外运维&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="适用场景"&gt;&lt;a href="#%e9%80%82%e7%94%a8%e5%9c%ba%e6%99%af" class="header-anchor"&gt;&lt;/a&gt;适用场景
+&lt;/h3&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;场景&lt;/th&gt;
+ &lt;th&gt;说明&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;读多写少&lt;/td&gt;
+ &lt;td&gt;用户频繁查询但写入较少，如电商订单查询&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;查询逻辑复杂&lt;/td&gt;
+ &lt;td&gt;需要多表 join、聚合计算，如报表系统&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;读写性能要求差异大&lt;/td&gt;
+ &lt;td&gt;写要求强一致，读要求低延迟高并发&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;业务逻辑复杂&lt;/td&gt;
+ &lt;td&gt;领域规则复杂，不适合在查询中混入业务逻辑&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+
+ &lt;blockquote&gt;
+ &lt;p&gt;如果你的系统读写都很简单，或者读远大于写但查询也不复杂，引入 CQRS 可能是过度设计。先评估实际需求，再决定是否采用。&lt;/p&gt;
+
+ &lt;/blockquote&gt;
+&lt;h3 id="五个设计原则"&gt;&lt;a href="#%e4%ba%94%e4%b8%aa%e8%ae%be%e8%ae%a1%e5%8e%9f%e5%88%99" class="header-anchor"&gt;&lt;/a&gt;五个设计原则
+&lt;/h3&gt;&lt;h4 id="1-读写职责分离"&gt;&lt;a href="#1-%e8%af%bb%e5%86%99%e8%81%8c%e8%b4%a3%e5%88%86%e7%a6%bb" class="header-anchor"&gt;&lt;/a&gt;1. 读写职责分离
+&lt;/h4&gt;&lt;ul&gt;
+&lt;li&gt;写操作只负责&lt;strong&gt;修改状态 + 执行业务规则&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;读操作只负责&lt;strong&gt;数据获取 + 展示优化&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;禁止在 Query 中修改状态&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;目的：避免读路径被业务逻辑污染，也保证查询可独立优化。&lt;/p&gt;
+&lt;h4 id="2-一致性策略明确"&gt;&lt;a href="#2-%e4%b8%80%e8%87%b4%e6%80%a7%e7%ad%96%e7%95%a5%e6%98%8e%e7%a1%ae" class="header-anchor"&gt;&lt;/a&gt;2. 一致性策略明确
+&lt;/h4&gt;&lt;ul&gt;
+&lt;li&gt;写路径：强一致（通过事务和聚合保证）&lt;/li&gt;
+&lt;li&gt;读路径：最终一致（允许短暂延迟）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;必须根据业务定义&amp;quot;可接受延迟范围&amp;quot;。例如：订单创建后 1 秒内可在查询中看到，这通常是可接受的。&lt;/p&gt;
+&lt;p&gt;目的：用&amp;quot;可控不一致&amp;quot;换取系统性能与扩展性。&lt;/p&gt;
+&lt;h4 id="3-模型分离"&gt;&lt;a href="#3-%e6%a8%a1%e5%9e%8b%e5%88%86%e7%a6%bb" class="header-anchor"&gt;&lt;/a&gt;3. 模型分离
+&lt;/h4&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;写模型（Domain Model）&lt;/strong&gt;：面向业务规则与一致性&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;读模型（Read Model）&lt;/strong&gt;：面向查询与展示，可以反范式化（去范式化）以提高查询效率&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;读模型不需要与数据库表结构一致，它只为查询服务。&lt;/p&gt;
+&lt;p&gt;目的：避免一个模型同时承担&amp;quot;复杂业务 + 高性能查询&amp;quot;两种职责。&lt;/p&gt;
+&lt;h4 id="4-存储分离"&gt;&lt;a href="#4-%e5%ad%98%e5%82%a8%e5%88%86%e7%a6%bb" class="header-anchor"&gt;&lt;/a&gt;4. 存储分离
+&lt;/h4&gt;&lt;ul&gt;
+&lt;li&gt;写存储：事务型数据库（如 MySQL），保证强一致性&lt;/li&gt;
+&lt;li&gt;读存储：缓存（如 Redis）/ 搜索引擎（如 ElasticSearch）/ 副本库&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;是否拆分存储取决于读压力与查询复杂度，并非所有场景都需要物理分离。&lt;/p&gt;
+&lt;p&gt;目的：让存储层也服务于不同的优化目标。&lt;/p&gt;
+&lt;h4 id="5-异步解耦"&gt;&lt;a href="#5-%e5%bc%82%e6%ad%a5%e8%a7%a3%e8%80%a6" class="header-anchor"&gt;&lt;/a&gt;5. 异步解耦
+&lt;/h4&gt;&lt;ul&gt;
+&lt;li&gt;通过领域事件（Domain Event）连接读写模型&lt;/li&gt;
+&lt;li&gt;流程：写操作 → 发布事件 → 异步更新读模型（Projection）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;需要接受最终一致性（存在延迟）。&lt;/p&gt;
+&lt;p&gt;目的：降低系统耦合，支持独立扩展读模型。&lt;/p&gt;
+&lt;h3 id="cqrs-架构概览"&gt;&lt;a href="#cqrs-%e6%9e%b6%e6%9e%84%e6%a6%82%e8%a7%88" class="header-anchor"&gt;&lt;/a&gt;CQRS 架构概览
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;┌─────────────┐ Command ┌──────────────────┐ Event ┌──────────────────┐
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ Client │ ──────────────→ │ Command Handler │ ─────────────→ │ Event Handler │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ │ │ (写流程编排) │ │ (Projection) │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;└─────────────┘ └────────┬─────────┘ └────────┬─────────┘
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │ │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ▼ ▼
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ┌──────────────┐ ┌──────────────┐
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │ Write Store │ │ Read Store │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │ (MySQL) │ │ (Redis/ES) │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; └──────────────┘ └──────────────┘
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ▲
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;┌─────────────┐ Query ┌──────────────────┐ │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ Client │ ──────────────→ │ Query Handler │ ───────────────────┘
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ │ │ (读流程编排) │
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;└─────────────┘ └──────────────────┘
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="实现步骤"&gt;&lt;a href="#%e5%ae%9e%e7%8e%b0%e6%ad%a5%e9%aa%a4" class="header-anchor"&gt;&lt;/a&gt;实现步骤
+&lt;/h2&gt;&lt;p&gt;CQRS 并不是一步到位的，可以根据系统复杂度分三个层次渐进式引入。不必一上来就用最复杂的方案。&lt;/p&gt;
+&lt;h3 id="level-1逻辑分离单库"&gt;&lt;a href="#level-1%e9%80%bb%e8%be%91%e5%88%86%e7%a6%bb%e5%8d%95%e5%ba%93" class="header-anchor"&gt;&lt;/a&gt;Level 1：逻辑分离（单库）
+&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;思路&lt;/strong&gt;：仍然使用单个数据库，只在代码层面分离读和写。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;做法&lt;/strong&gt;：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;代码中分为 Command 对象和 Query 对象&lt;/li&gt;
+&lt;li&gt;写操作使用 Domain Model，读操作使用独立的 Read Model（DTO / VO）&lt;/li&gt;
+&lt;li&gt;共享同一个数据库，读模型可以通过 SQL 视图或简单映射得到&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;适用场景&lt;/strong&gt;：系统初期，读写压力都不大，但希望代码职责清晰。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;优点&lt;/strong&gt;：改动最小，风险最低
+&lt;strong&gt;局限&lt;/strong&gt;：读和写仍然竞争同一份数据库资源&lt;/p&gt;
+&lt;h3 id="level-2物理分离双库"&gt;&lt;a href="#level-2%e7%89%a9%e7%90%86%e5%88%86%e7%a6%bb%e5%8f%8c%e5%ba%93" class="header-anchor"&gt;&lt;/a&gt;Level 2：物理分离（双库）
+&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;思路&lt;/strong&gt;：将数据库分为写库和读库，读库独立优化。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;做法&lt;/strong&gt;：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;写库（MySQL 主库）：处理所有写操作，保证强一致性&lt;/li&gt;
+&lt;li&gt;读库（MySQL 从库 / Redis / ElasticSearch）：处理所有读操作&lt;/li&gt;
+&lt;li&gt;写库数据通过主从复制或同步机制同步到读库&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;适用场景&lt;/strong&gt;：读多写少，查询逻辑较复杂，读操作需要独立扩容。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;优点&lt;/strong&gt;：读写不竞争数据库资源，读库可针对性优化
+&lt;strong&gt;局限&lt;/strong&gt;：需要维护数据同步机制，存在同步延迟&lt;/p&gt;
+&lt;h3 id="level-3事件驱动event-sourcing--cqrs"&gt;&lt;a href="#level-3%e4%ba%8b%e4%bb%b6%e9%a9%b1%e5%8a%a8event-sourcing--cqrs" class="header-anchor"&gt;&lt;/a&gt;Level 3：事件驱动（Event Sourcing + CQRS）
+&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;思路&lt;/strong&gt;：写路径产生的状态变化抽象为领域事件（Domain Event），由 Event Handler 异步构建和更新 Read Model。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;做法&lt;/strong&gt;：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;写操作修改 Domain Model 后，发布领域事件&lt;/li&gt;
+&lt;li&gt;Event Handler 监听事件，将数据转换为读模型需要的格式，写入 Read Store&lt;/li&gt;
+&lt;li&gt;读操作直接查询 Read Store，完全不访问 Write Store&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;适用场景&lt;/strong&gt;：业务逻辑复杂，需要完整的审计日志，或需要多个读模型服务不同查询场景。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;优点&lt;/strong&gt;：读写完全解耦，可灵活构建多个专用读模型
+&lt;strong&gt;局限&lt;/strong&gt;：架构最复杂，需要事件基础设施（消息队列），调试难度最高&lt;/p&gt;
+&lt;h3 id="三种层次对比"&gt;&lt;a href="#%e4%b8%89%e7%a7%8d%e5%b1%82%e6%ac%a1%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;三种层次对比
+&lt;/h3&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;维度&lt;/th&gt;
+ &lt;th&gt;L1 逻辑分离&lt;/th&gt;
+ &lt;th&gt;L2 物理分离&lt;/th&gt;
+ &lt;th&gt;L3 事件驱动&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;存储数量&lt;/td&gt;
+ &lt;td&gt;1 个&lt;/td&gt;
+ &lt;td&gt;2 个&lt;/td&gt;
+ &lt;td&gt;2+ 个&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;代码改动&lt;/td&gt;
+ &lt;td&gt;小&lt;/td&gt;
+ &lt;td&gt;中&lt;/td&gt;
+ &lt;td&gt;大&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;读写解耦程度&lt;/td&gt;
+ &lt;td&gt;低&lt;/td&gt;
+ &lt;td&gt;中&lt;/td&gt;
+ &lt;td&gt;高&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;一致性&lt;/td&gt;
+ &lt;td&gt;强一致&lt;/td&gt;
+ &lt;td&gt;最终一致（秒级延迟）&lt;/td&gt;
+ &lt;td&gt;最终一致（毫秒~秒级延迟）&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;基础设施要求&lt;/td&gt;
+ &lt;td&gt;无&lt;/td&gt;
+ &lt;td&gt;主从复制 / 同步工具&lt;/td&gt;
+ &lt;td&gt;消息队列 + Event Store&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;适用阶段&lt;/td&gt;
+ &lt;td&gt;项目初期&lt;/td&gt;
+ &lt;td&gt;系统成长期&lt;/td&gt;
+ &lt;td&gt;大型复杂系统&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="示例--踩坑"&gt;&lt;a href="#%e7%a4%ba%e4%be%8b--%e8%b8%a9%e5%9d%91" class="header-anchor"&gt;&lt;/a&gt;示例 / 踩坑
+&lt;/h2&gt;&lt;p&gt;下面通过一个电商订单系统，演示 CQRS Level 3（事件驱动）的完整实现。&lt;/p&gt;
+&lt;h3 id="业务场景"&gt;&lt;a href="#%e4%b8%9a%e5%8a%a1%e5%9c%ba%e6%99%af" class="header-anchor"&gt;&lt;/a&gt;业务场景
+&lt;/h3&gt;&lt;p&gt;电商订单系统，核心需求：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;写&lt;/strong&gt;：创建订单、支付、取消（要求强一致性和复杂业务规则校验）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;读&lt;/strong&gt;：订单列表、订单详情（用户频繁查询，需要低延迟）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;特点&lt;/strong&gt;：读多写少，查询涉及多表 join 和聚合计算&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="cqrs-改造思路"&gt;&lt;a href="#cqrs-%e6%94%b9%e9%80%a0%e6%80%9d%e8%b7%af" class="header-anchor"&gt;&lt;/a&gt;CQRS 改造思路
+&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;写（Command）&lt;/strong&gt;：CreateOrder → OrderAggregate → MySQL&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;读（Query）&lt;/strong&gt;：GetOrderDetail → Redis / Read DB（预聚合数据）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;连接&lt;/strong&gt;：OrderCreatedEvent → Event Handler 异步更新 Read Model&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="代码实现"&gt;&lt;a href="#%e4%bb%a3%e7%a0%81%e5%ae%9e%e7%8e%b0" class="header-anchor"&gt;&lt;/a&gt;代码实现
+&lt;/h3&gt;&lt;h4 id="command写路径的输入模型"&gt;&lt;a href="#command%e5%86%99%e8%b7%af%e5%be%84%e7%9a%84%e8%be%93%e5%85%a5%e6%a8%a1%e5%9e%8b" class="header-anchor"&gt;&lt;/a&gt;Command：写路径的输入模型
+&lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;CreateOrderCommand&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;userId&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;List&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 构造方法 / getter&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="domain-model核心领域对象"&gt;&lt;a href="#domain-model%e6%a0%b8%e5%bf%83%e9%a2%86%e5%9f%9f%e5%af%b9%e8%b1%a1" class="header-anchor"&gt;&lt;/a&gt;Domain Model：核心领域对象
+&lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;id&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;userId&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;List&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;create&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;userId&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;List&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;==&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kc"&gt;null&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;isEmpty&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;throw&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IllegalArgumentException&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;商品不能为空&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;userId&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;userId&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;productIds&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productIds&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;status&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;#34;CREATED&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="command-handler写流程编排"&gt;&lt;a href="#command-handler%e5%86%99%e6%b5%81%e7%a8%8b%e7%bc%96%e6%8e%92" class="header-anchor"&gt;&lt;/a&gt;Command Handler：写流程编排
+&lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;CreateOrderHandler&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderRepository&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;repository&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;EventPublisher&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;eventPublisher&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;handle&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;CreateOrderCommand&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cmd&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 1. 构建领域对象（业务规则校验在 create 方法中）&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;create&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;cmd&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getUserId&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cmd&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getProductIds&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 2. 持久化（事务保证强一致性）&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;repository&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;save&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 3. 发布事件（异步更新读模型）&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;eventPublisher&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;publish&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderCreatedEvent&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getId&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;order&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getId&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="read-model读模型专为查询设计"&gt;&lt;a href="#read-model%e8%af%bb%e6%a8%a1%e5%9e%8b%e4%b8%93%e4%b8%ba%e6%9f%a5%e8%af%a2%e8%ae%be%e8%ae%a1" class="header-anchor"&gt;&lt;/a&gt;Read Model：读模型（专为查询设计）
+&lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;OrderView&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;orderId&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;List&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productNames&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BigDecimal&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;totalPrice&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// getter&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;注意读模型和写模型的区别：写模型存储 &lt;code&gt;productIds&lt;/code&gt;（商品 ID），读模型存储 &lt;code&gt;productNames&lt;/code&gt;（商品名称）和 &lt;code&gt;totalPrice&lt;/code&gt;（总价）——这是面向查询优化的结果。&lt;/p&gt;
+&lt;h4 id="query-handler读流程编排"&gt;&lt;a href="#query-handler%e8%af%bb%e6%b5%81%e7%a8%8b%e7%bc%96%e6%8e%92" class="header-anchor"&gt;&lt;/a&gt;Query Handler：读流程编排
+&lt;/h4&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;GetOrderDetailHandler&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderReadRepository&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;readRepository&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderView&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;handle&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Long&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;orderId&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 直接查缓存或 Read DB，无业务逻辑&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;readRepository&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;findById&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;orderId&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h4 id="event-handler投影器projection"&gt;&lt;a href="#event-handler%e6%8a%95%e5%bd%b1%e5%99%a8projection" class="header-anchor"&gt;&lt;/a&gt;Event Handler：投影器（Projection）
+&lt;/h4&gt;&lt;p&gt;Projection 监听领域事件，将 Command Side 的数据转换为 Read Model 并持久化：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;OrderProjectionHandler&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderReadRepository&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;readRepository&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;private&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ProductRepository&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productRepository&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;public&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;void&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;on&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;OrderCreatedEvent&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;event&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;List&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productNames&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;productRepository&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;findNames&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;event&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getProductIds&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderView&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;view&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OrderView&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;view&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;setOrderId&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;event&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getOrderId&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;view&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;setStatus&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;event&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;getStatus&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;view&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;setProductNames&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;productNames&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;readRepository&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="na"&gt;save&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;view&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h3 id="常见问题与踩坑"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e9%97%ae%e9%a2%98%e4%b8%8e%e8%b8%a9%e5%9d%91" class="header-anchor"&gt;&lt;/a&gt;常见问题与踩坑
+&lt;/h3&gt;&lt;p&gt;&lt;strong&gt;问题 1：读模型更新延迟导致用户看不到最新数据&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;这是 CQRS 最常见的问题。用户刚创建订单，立刻查询却找不到。&lt;/p&gt;
+&lt;p&gt;解决方案：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;前端在写操作成功后，短暂轮询或使用 WebSocket 等待读模型更新&lt;/li&gt;
+&lt;li&gt;在读模型未就绪时，回退到写库查询（Fallback 策略）&lt;/li&gt;
+&lt;li&gt;在 UI 上提示用户&amp;quot;数据正在同步中&amp;quot;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;问题 2：事件处理失败导致读写数据不一致&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Event Handler 处理事件时可能失败（网络抖动、数据库异常等），导致读模型缺失数据。&lt;/p&gt;
+&lt;p&gt;解决方案：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;事件消费必须实现幂等性，重复消费不会产生副作用&lt;/li&gt;
+&lt;li&gt;使用消息队列的重试机制（如 RabbitMQ 的 Dead Letter Queue）&lt;/li&gt;
+&lt;li&gt;定期做数据对账，比对写库和读库的数据差异并修复&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;问题 3：读模型结构变更困难&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;业务变化导致读模型需要新增字段，但历史事件中不包含这些字段。&lt;/p&gt;
+&lt;p&gt;解决方案：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;新增字段设置默认值，避免历史数据缺失&lt;/li&gt;
+&lt;li&gt;设计事件时采用&amp;quot;事件增量&amp;quot;模式，通过版本号管理字段变更&lt;/li&gt;
+&lt;li&gt;需要时可以发起全量重建（Rebuild）读模型&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;问题 4：过度设计&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;并非所有系统都需要 CQRS。如果读写逻辑简单、并发量不大，引入 CQRS 反而增加不必要的复杂度。&lt;/p&gt;
+&lt;p&gt;判断标准：当你的系统确实面临&amp;quot;读写性能无法兼顾&amp;quot;的瓶颈时，再考虑引入。&lt;/p&gt;
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
+&lt;/h2&gt;&lt;p&gt;本文介绍了 CQRS 模式的核心思想和实践方法，回顾要点：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;核心思路&lt;/strong&gt;：将 Command（写）和 Query（读）解耦，各自优化&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;五个设计原则&lt;/strong&gt;：读写职责分离、一致性策略明确、模型分离、存储分离、异步解耦&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;三种演进层次&lt;/strong&gt;：逻辑分离 → 物理分离 → 事件驱动，根据系统复杂度渐进式引入&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;关键取舍&lt;/strong&gt;：用最终一致性换取读写性能和扩展性&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;CQRS 不是银弹，它解决的是&amp;quot;读写性能无法兼顾&amp;quot;这一类特定问题。如果你的系统面临这个瓶颈，可以从 Level 1（逻辑分离）开始，渐进式演进到更复杂的方案。&lt;/p&gt;</description></item></channel></rss>
