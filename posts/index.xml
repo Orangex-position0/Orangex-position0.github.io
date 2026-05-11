@@ -1,4 +1,161 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>文章 on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/posts/</link><description>Recent content in 文章 on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 05 May 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>使用 CQRS 处理读写分离架构</title><link>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</link><pubDate>Tue, 05 May 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</guid><description>&lt;h2 id="背景--问题"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>文章 on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/posts/</link><description>Recent content in 文章 on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 11 May 2026 09:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>RAII：将资源生命周期绑定给对象</title><link>https://Orangex-position0.github.io/posts/rust/raii-resource-management/</link><pubDate>Mon, 11 May 2026 09:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/raii-resource-management/</guid><description>&lt;h2 id="背景"&gt;&lt;a href="#%e8%83%8c%e6%99%af" class="header-anchor"&gt;&lt;/a&gt;背景
+&lt;/h2&gt;&lt;p&gt;在系统编程中，资源管理是一个核心问题。无论是内存、文件句柄、Socket 连接还是锁，都需要在不再使用时正确释放。如果忘记释放，就会造成资源泄漏；如果重复释放，又会导致未定义行为。&lt;/p&gt;
+&lt;p&gt;传统做法是让开发者手动管理资源的获取和释放——在 C 语言中这体现为成对的 &lt;code&gt;malloc/free&lt;/code&gt;、&lt;code&gt;fopen/fclose&lt;/code&gt; 调用。这种方式灵活但脆弱，一旦控制流变得复杂（异常、早期返回、嵌套调用），很容易遗漏释放逻辑。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;RAII (Resource Acquisition Is Initialization，资源获取即初始化)&lt;/strong&gt; 提供了一种优雅的解决思路：将资源的生命周期绑定到对象的生命周期上。对象创建时获取资源，对象销毁时自动释放资源。开发者不再需要手动编写清理代码，资源的释放由语言运行时保证。&lt;/p&gt;
+&lt;p&gt;本文将从 RAII 的核心思想出发，重点讲解 Rust 如何通过 &lt;code&gt;Drop&lt;/code&gt; trait 实现这一机制，并对比 C++、Java、Go 中资源管理方式的差异。&lt;/p&gt;
+&lt;h2 id="raii-的核心思想"&gt;&lt;a href="#raii-%e7%9a%84%e6%a0%b8%e5%bf%83%e6%80%9d%e6%83%b3" class="header-anchor"&gt;&lt;/a&gt;RAII 的核心思想
+&lt;/h2&gt;&lt;p&gt;RAII 的原则很简单：&lt;strong&gt;资源生命周期与对象生命周期绑定&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;具体来说有三个关键特性：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;安全性&lt;/strong&gt;：避免内存泄漏和双重释放，资源的释放由编译器保证，而非依赖开发者记忆&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;简洁性&lt;/strong&gt;：调用者无需显式编写 cleanup 代码，减少出错的可能&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;确定性释放&lt;/strong&gt;：资源在对象离开作用域时立即释放，不需要依赖不确定性 GC 的调度&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;RAII 的典型使用场景包括：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;自动释放文件句柄、Socket 连接、数据库连接&lt;/li&gt;
+&lt;li&gt;互斥锁的自动释放（离开临界区即解锁）&lt;/li&gt;
+&lt;li&gt;临时状态的恢复（如修改配置后自动还原）&lt;/li&gt;
+&lt;li&gt;事务的自动回滚&lt;/li&gt;
+&lt;li&gt;Scope Exit 清理逻辑&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;本质上，RAII 做的事情是：&lt;strong&gt;把操作系统层面的物理资源，映射为代码中的逻辑对象，不需要依赖不确定性 GC 的调度&lt;/strong&gt;。&lt;/p&gt;
+&lt;h2 id="rust-中的-raii-实现"&gt;&lt;a href="#rust-%e4%b8%ad%e7%9a%84-raii-%e5%ae%9e%e7%8e%b0" class="header-anchor"&gt;&lt;/a&gt;Rust 中的 RAII 实现
+&lt;/h2&gt;&lt;p&gt;Rust 将 RAII 作为语言规范的一部分，通过三个核心机制协同实现：&lt;strong&gt;&lt;code&gt;Drop&lt;/code&gt; trait&lt;/strong&gt;、&lt;strong&gt;所有权系统&lt;/strong&gt;和&lt;strong&gt;生命周期&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;当所有权变量超出作用域时，Rust 会自动：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;释放变量占用的内存&lt;/li&gt;
+&lt;li&gt;调用该变量的析构函数（&lt;code&gt;drop&lt;/code&gt;），释放被映射给它的资源&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id="drop-trait"&gt;&lt;a href="#drop-trait" class="header-anchor"&gt;&lt;/a&gt;Drop trait
+&lt;/h3&gt;&lt;p&gt;Rust 通过 &lt;code&gt;Drop&lt;/code&gt; trait 提供析构函数机制。当资源超出作用域时，编译器会自动插入对 &lt;code&gt;drop&lt;/code&gt; 方法的调用。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;Drop&lt;/code&gt; trait 只有一个方法：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;drop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;下面是一个完整的示例：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="nc"&gt;FileGuard&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Drop&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FileGuard&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;drop&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;release resource&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_f&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FileGuard&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;working...&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 离开作用域时，编译器自动调用 _f 的 drop()
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 输出顺序：
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// working...
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// release resource
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;注意输出顺序——&lt;code&gt;drop&lt;/code&gt; 在 &lt;code&gt;main&lt;/code&gt; 函数结束、变量离开作用域时被调用，这正是 RAII 确定性释放的体现。&lt;/p&gt;
+&lt;h3 id="所有权与-raii-的配合"&gt;&lt;a href="#%e6%89%80%e6%9c%89%e6%9d%83%e4%b8%8e-raii-%e7%9a%84%e9%85%8d%e5%90%88" class="header-anchor"&gt;&lt;/a&gt;所有权与 RAII 的配合
+&lt;/h3&gt;&lt;p&gt;Rust 的所有权系统进一步强化了 RAII 的保证。因为每个值在任意时刻只有一个所有者，所以不存在&amp;quot;多个对象引用同一资源但无法确定谁负责释放&amp;quot;的问题。当所有者离开作用域，资源必定被释放，且只释放一次。&lt;/p&gt;
+&lt;h2 id="其他语言中的资源管理"&gt;&lt;a href="#%e5%85%b6%e4%bb%96%e8%af%ad%e8%a8%80%e4%b8%ad%e7%9a%84%e8%b5%84%e6%ba%90%e7%ae%a1%e7%90%86" class="header-anchor"&gt;&lt;/a&gt;其他语言中的资源管理
+&lt;/h2&gt;&lt;p&gt;不同语言对 RAII 的支持程度各不相同，理解这些差异有助于在实际项目中做出合理的技术选择。&lt;/p&gt;
+&lt;h3 id="craii-的原产地"&gt;&lt;a href="#craii-%e7%9a%84%e5%8e%9f%e4%ba%a7%e5%9c%b0" class="header-anchor"&gt;&lt;/a&gt;C++：RAII 的原产地
+&lt;/h3&gt;&lt;p&gt;C++ 从 C++98 开始就在标准库中支持 RAII，是最早将这一思想内化为语言习惯的编程语言。&lt;/p&gt;
+&lt;p&gt;核心实现方式：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;构造函数&lt;/strong&gt;获取资源&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;析构函数&lt;/strong&gt;释放资源&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;标准库提供了大量 RAII 包装器：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-cpp" data-lang="cpp"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 智能指针
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_unique&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="c1"&gt;// 独占所有权
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_shared&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="c1"&gt;// 共享所有权
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 其他 RAII 类型
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;scoped_lock&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Mutex&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="c1"&gt;// 自动解锁
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;fstream&lt;/span&gt; &lt;span class="c1"&gt;// 自动关闭文件
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;C++ 中 RAII 与异常机制天然配合——即使函数因异常中途返回，栈展开过程中仍会调用局部对象的析构函数，确保资源被正确释放。&lt;/p&gt;
+&lt;h3 id="java-和-go依赖-gc-和显式清理"&gt;&lt;a href="#java-%e5%92%8c-go%e4%be%9d%e8%b5%96-gc-%e5%92%8c%e6%98%be%e5%bc%8f%e6%b8%85%e7%90%86" class="header-anchor"&gt;&lt;/a&gt;Java 和 Go：依赖 GC 和显式清理
+&lt;/h3&gt;&lt;p&gt;Java 和 Go &lt;strong&gt;不属于典型的 RAII 语言&lt;/strong&gt;。它们的资源释放并不真正绑定对象生命周期，因此不具备严格意义上的 RAII 语义。&lt;/p&gt;
+&lt;p&gt;两者的共同特点：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;内存&lt;/strong&gt;由 GC 自动管理，开发者无需手动释放&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;非内存资源&lt;/strong&gt;（文件、Socket、锁等）仍需显式关闭&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;以 Java 为例，&lt;code&gt;try-with-resources&lt;/code&gt; 语法虽然提供了类似 RAII 的自动关闭能力，但本质上是通过 &lt;code&gt;AutoCloseable&lt;/code&gt; 接口和编译器生成的 &lt;code&gt;finally&lt;/code&gt; 块实现的，而非对象析构：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-java" data-lang="java"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;var&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FileInputStream&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;data.txt&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 使用 file&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 离开 try 块后 file 自动关闭&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 但关闭时机依赖 finally 的执行，而非对象 GC&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Go 则更加依赖显式的 &lt;code&gt;defer&lt;/code&gt; 来保证清理逻辑执行：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-go" data-lang="go"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;func&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nf"&gt;processFile&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;f&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;err&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;:=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;os&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;Open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;data.txt&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;err&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kc"&gt;nil&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;err&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;defer&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nx"&gt;f&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nf"&gt;Close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 函数返回时执行&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 使用 f&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kc"&gt;nil&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;defer&lt;/code&gt; 提供了确定性的清理保证，但它绑定的是&lt;strong&gt;函数作用域&lt;/strong&gt;而非对象生命周期，与 RAII 的语义仍有本质区别。&lt;/p&gt;
+&lt;h3 id="对比总结"&gt;&lt;a href="#%e5%af%b9%e6%af%94%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;对比总结
+&lt;/h3&gt;&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;特性&lt;/th&gt;
+ &lt;th&gt;Rust&lt;/th&gt;
+ &lt;th&gt;C++&lt;/th&gt;
+ &lt;th&gt;Java&lt;/th&gt;
+ &lt;th&gt;Go&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;RAII 支持&lt;/td&gt;
+ &lt;td&gt;语言规范级&lt;/td&gt;
+ &lt;td&gt;语言习惯级&lt;/td&gt;
+ &lt;td&gt;有限（try-with-resources）&lt;/td&gt;
+ &lt;td&gt;有限（defer）&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;内存管理&lt;/td&gt;
+ &lt;td&gt;所有权 + Drop&lt;/td&gt;
+ &lt;td&gt;RAII 智能指针&lt;/td&gt;
+ &lt;td&gt;GC&lt;/td&gt;
+ &lt;td&gt;GC&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;非内存资源&lt;/td&gt;
+ &lt;td&gt;Drop trait 自动释放&lt;/td&gt;
+ &lt;td&gt;析构函数自动释放&lt;/td&gt;
+ &lt;td&gt;AutoCloseable / 显式&lt;/td&gt;
+ &lt;td&gt;defer / 显式&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;释放确定性&lt;/td&gt;
+ &lt;td&gt;作用域结束时&lt;/td&gt;
+ &lt;td&gt;作用域结束时&lt;/td&gt;
+ &lt;td&gt;GC 调度不确定&lt;/td&gt;
+ &lt;td&gt;函数返回时&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
+&lt;/h2&gt;&lt;p&gt;RAII 的核心价值在于&lt;strong&gt;将资源管理的正确性从开发者的自觉转移到了语言机制的保证上&lt;/strong&gt;。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;在 &lt;strong&gt;Rust&lt;/strong&gt; 中，&lt;code&gt;Drop&lt;/code&gt; trait + 所有权系统构成了语言级的 RAII 支持，编译器确保资源在离开作用域时被释放，且只释放一次&lt;/li&gt;
+&lt;li&gt;在 &lt;strong&gt;C++&lt;/strong&gt; 中，RAII 是长期以来的惯用模式，构造/析构函数和栈展开机制提供了完整的保证&lt;/li&gt;
+&lt;li&gt;在 &lt;strong&gt;Java&lt;/strong&gt; 和 &lt;strong&gt;Go&lt;/strong&gt; 中，GC 解决了内存管理问题，但非内存资源仍需通过 &lt;code&gt;try-with-resources&lt;/code&gt; 或 &lt;code&gt;defer&lt;/code&gt; 等机制显式管理，与真正的 RAII 存在语义差异&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;如果你正在使用 Rust 或 C++，充分利用 RAII 可以大幅减少资源管理的 bug。如果你来自 Java 或 Go 背景，理解 RAII 的思想也有助于写出更安全、更简洁的资源管理代码。&lt;/p&gt;
+&lt;h2 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://rustcc.cn/article?id=ce702c44-52e3-4dd5-84d9-3982035a3c38" target="_blank" rel="noopener"
+ &gt;在 C, C++, Rust 中的 RAII 设计模式 - Rust 语言中文社区&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=q6dVKMgeEkk&amp;amp;t=29s" target="_blank" rel="noopener"
+ &gt;What is RAII (Resource Acquisition Is Initialization)? - YouTube&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://doc.rust-lang.org/book/ch15-03-drop.html" target="_blank" rel="noopener"
+ &gt;Running Code on Cleanup with the Drop Trait - The Rust Programming Language&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=pTMvh6VzDls" target="_blank" rel="noopener"
+ &gt;Rust and RAII Memory Management - Computerphile&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>使用 CQRS 处理读写分离架构</title><link>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</link><pubDate>Tue, 05 May 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/distributed-systems/cqrs-architecture/</guid><description>&lt;h2 id="背景--问题"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题
 &lt;/h2&gt;&lt;p&gt;在传统架构中，单个数据模型通常兼顾读和写的职责。但随着系统规模扩展，读和写操作在性能和扩展性上呈现出明显的不对称性：&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;strong&gt;数据表示不匹配&lt;/strong&gt;：写入时需要的字段结构与读取时需要的展示形式往往不同。例如，创建订单需要商品 ID 列表，但查询订单详情时用户希望看到商品名称和价格&lt;/li&gt;
