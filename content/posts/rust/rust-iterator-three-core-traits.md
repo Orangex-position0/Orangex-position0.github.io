@@ -1,6 +1,6 @@
 +++
 title = 'Rust 迭代器的三个核心 Trait：Iterator、IntoIterator、FromIterator'
-date = 2026-06-09T14:00:00+08:00
+date = 2026-06-09T10:00:00+08:00
 draft = false
 description = '从 trait 定义到 for 循环语法糖，再到自定义集合的完整迭代器支持，看 Iterator、IntoIterator、FromIterator 三个 trait 如何协作'
 
