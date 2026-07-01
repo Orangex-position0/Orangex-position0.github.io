@@ -1,4 +1,146 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Rust on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/rust/</link><description>Recent content in Rust on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 09 Jun 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/rust/index.xml" rel="self" type="application/rss+xml"/><item><title>Rust 迭代器的三个核心 Trait：Iterator、IntoIterator、FromIterator</title><link>https://Orangex-position0.github.io/posts/rust/rust-iterator-three-core-traits/</link><pubDate>Tue, 09 Jun 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-iterator-three-core-traits/</guid><description>&lt;h2 id="引言"&gt;&lt;a href="#%e5%bc%95%e8%a8%80" class="header-anchor"&gt;&lt;/a&gt;引言
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Rust on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/rust/</link><description>Recent content in Rust on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Wed, 01 Jul 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/rust/index.xml" rel="self" type="application/rss+xml"/><item><title>如果你来设计一门语言：Rust 内存模型是怎么想出来的</title><link>https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/</link><pubDate>Wed, 01 Jul 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/</guid><description>&lt;p&gt;&lt;img alt="封面：Ferris 守门人" class="gallery-image" data-flex-basis="440px" data-flex-grow="183" height="768" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/cover.png" srcset="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/cover_hu_690a66d4cb137300.png 800w, https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/cover.png 1408w" width="1408"&gt;&lt;/p&gt;
+&lt;h2 id="凌晨三点的-segfault"&gt;&lt;a href="#%e5%87%8c%e6%99%a8%e4%b8%89%e7%82%b9%e7%9a%84-segfault" class="header-anchor"&gt;&lt;/a&gt;凌晨三点的 segfault
+&lt;/h2&gt;&lt;p&gt;2014 年 4 月，OpenSSL 爆出 Heartbleed。一个缓冲区越界读漏洞，让攻击者可以一遍遍抠出服务器进程的内存碎片，里面有机票订单、Session Cookie，甚至私钥。整个互联网紧急停摆，CVE 编号 CVE-2014-0160。&lt;/p&gt;
+&lt;p&gt;这并不是孤例。微软和 Google 的内部统计都显示，约 70% 的安全漏洞本质上是内存安全问题。&lt;/p&gt;
+&lt;p&gt;凌晨三点，你的 C 服务挂了。日志里写着 &lt;code&gt;segmentation fault (core dumped)&lt;/code&gt;。你打开 gdb，看到一个悬垂指针，指向一块已经被释放的内存。&lt;/p&gt;
+&lt;p&gt;这种事系统程序员干了三十年。&lt;/p&gt;
+&lt;p&gt;于是有人开始问一个怪问题：&lt;strong&gt;能不能设计一门语言，从语法上就不让这类错误发生？&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Java 和 Go 选了 GC，安全但运行时不可控。Rust 走了第三条路：把所有内存错误在编译期挡住，运行时零成本。&lt;/p&gt;
+&lt;p&gt;这条路是怎么想出来的？&lt;/p&gt;
+&lt;h2 id="内存管理要回答的三个问题"&gt;&lt;a href="#%e5%86%85%e5%ad%98%e7%ae%a1%e7%90%86%e8%a6%81%e5%9b%9e%e7%ad%94%e7%9a%84%e4%b8%89%e4%b8%aa%e9%97%ae%e9%a2%98" class="header-anchor"&gt;&lt;/a&gt;内存管理要回答的三个问题
+&lt;/h2&gt;&lt;p&gt;任何一门语言，处理内存都要回答三个问题：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;谁来分配和释放？&lt;/li&gt;
+&lt;li&gt;怎么共享同一块内存？&lt;/li&gt;
+&lt;li&gt;怎么避免访问到无效内存？&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;第一个问题的三种主流答法，基本定义了一门语言的性格：&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;方案&lt;/th&gt;
+					&lt;th&gt;思路&lt;/th&gt;
+					&lt;th&gt;优点&lt;/th&gt;
+					&lt;th&gt;代价&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;strong&gt;手动管理&lt;/strong&gt; (C)&lt;/td&gt;
+					&lt;td&gt;程序员自己 malloc/free&lt;/td&gt;
+					&lt;td&gt;极致控制，零运行时开销&lt;/td&gt;
+					&lt;td&gt;内存泄漏、双重释放、悬垂指针&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;strong&gt;垃圾回收&lt;/strong&gt; (Java/Go)&lt;/td&gt;
+					&lt;td&gt;后台 GC 自动清理&lt;/td&gt;
+					&lt;td&gt;开发门槛低&lt;/td&gt;
+					&lt;td&gt;STW 停顿、内存峰值不可控&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;strong&gt;所有权&lt;/strong&gt; (Rust)&lt;/td&gt;
+					&lt;td&gt;编译期插入释放代码&lt;/td&gt;
+					&lt;td&gt;兼顾安全与性能&lt;/td&gt;
+					&lt;td&gt;学习曲线陡&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;img alt="三种内存管理哲学" class="gallery-image" data-flex-basis="440px" data-flex-grow="183" height="768" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/three-philosophies.png" srcset="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/three-philosophies_hu_d1b1596fcdde4020.png 800w, https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/three-philosophies.png 1408w" width="1408"&gt;&lt;/p&gt;
+&lt;p&gt;后面三节分别对应这三个问题。Rust 的答案放在一起看才显得天才：单独拿任何一条出来都不新鲜，组合在一起就是另一回事。&lt;/p&gt;
+&lt;h2 id="第一道谁来分配和释放"&gt;&lt;a href="#%e7%ac%ac%e4%b8%80%e9%81%93%e8%b0%81%e6%9d%a5%e5%88%86%e9%85%8d%e5%92%8c%e9%87%8a%e6%94%be" class="header-anchor"&gt;&lt;/a&gt;第一道：谁来分配和释放？
+&lt;/h2&gt;&lt;h3 id="所有权的三条规则"&gt;&lt;a href="#%e6%89%80%e6%9c%89%e6%9d%83%e7%9a%84%e4%b8%89%e6%9d%a1%e8%a7%84%e5%88%99" class="header-anchor"&gt;&lt;/a&gt;所有权的三条规则
+&lt;/h3&gt;&lt;p&gt;Rust 的答案叫 Ownership，规则只有三条：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;每个值在任意时刻有且只有一个 owner&lt;/li&gt;
+&lt;li&gt;当 owner 离开作用域，值被自动释放&lt;/li&gt;
+&lt;li&gt;把值赋给别人，所有权 move，原变量失效&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;三条加在一起，编译器就能在编译期精确推导每一块内存什么时候该释放。不需要引用计数，不需要 GC 扫描，不需要程序员手写 free。&lt;/p&gt;
+&lt;h3 id="一个最小的例子"&gt;&lt;a href="#%e4%b8%80%e4%b8%aa%e6%9c%80%e5%b0%8f%e7%9a%84%e4%be%8b%e5%ad%90" class="header-anchor"&gt;&lt;/a&gt;一个最小的例子
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;String&lt;/span&gt;::&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;hello&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// s 是这块堆内存的 owner
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 离开作用域，String 的 drop 自动被调用，内存释放
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;drop&lt;/code&gt; 是编译器在作用域结束处自动插入的。这就是&amp;quot;零运行时开销&amp;quot;的真正含义：最终的机器码和你手写 free 一模一样，只是时机被编译器替你算好了。&lt;/p&gt;
+&lt;h3 id="move-语义赋值后原变量为什么不能用了"&gt;&lt;a href="#move-%e8%af%ad%e4%b9%89%e8%b5%8b%e5%80%bc%e5%90%8e%e5%8e%9f%e5%8f%98%e9%87%8f%e4%b8%ba%e4%bb%80%e4%b9%88%e4%b8%8d%e8%83%bd%e7%94%a8%e4%ba%86" class="header-anchor"&gt;&lt;/a&gt;Move 语义：赋值后原变量为什么不能用了
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s1&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;String&lt;/span&gt;::&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;hello&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="si"&gt;{}&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s1&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 编译错误：s1 已经被 move 了
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;C++ 程序员看到这段代码会本能地紧张：s1 和 s2 是不是指向同一块内存？析构的时候会不会 double free？&lt;/p&gt;
+&lt;p&gt;Rust 的回答简单粗暴：&lt;strong&gt;所有权已经 move 到 s2 了，s1 不再有效，编译器直接拒绝编译&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;这看起来别扭，但它解决了一个根本问题：如果两个变量都能访问同一块堆内存，谁负责释放？引用计数？GC？Rust 选择不让这种情况在默认情况下发生。&lt;/p&gt;
+&lt;h3 id="对照c-的-use-after-free"&gt;&lt;a href="#%e5%af%b9%e7%85%a7c-%e7%9a%84-use-after-free" class="header-anchor"&gt;&lt;/a&gt;对照：C 的 use-after-free
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kt"&gt;char&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nf"&gt;malloc&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="nf"&gt;free&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="nf"&gt;printf&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;%s&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt; &lt;span class="c1"&gt;// 未定义行为，可能崩溃，也可能默默错下去
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这种 bug 在 C 里能跑很久才暴露，等到暴露时已经不知道是谁的锅。Rust 里它根本编译不过。&lt;/p&gt;
+&lt;h2 id="第二道怎么共享内存"&gt;&lt;a href="#%e7%ac%ac%e4%ba%8c%e9%81%93%e6%80%8e%e4%b9%88%e5%85%b1%e4%ba%ab%e5%86%85%e5%ad%98" class="header-anchor"&gt;&lt;/a&gt;第二道：怎么共享内存？
+&lt;/h2&gt;&lt;p&gt;如果所有权严格只能 move，那很多场景就难办了。函数传参怎么办？是不是每次调用都要把所有权交出去再还回来？&lt;/p&gt;
+&lt;p&gt;Rust 的答案是 &lt;strong&gt;借用 (borrowing)&lt;/strong&gt;。所有权不交出去，只把使用权临时借出去。&lt;/p&gt;
+&lt;h3 id="借用规则"&gt;&lt;a href="#%e5%80%9f%e7%94%a8%e8%a7%84%e5%88%99" class="header-anchor"&gt;&lt;/a&gt;借用规则
+&lt;/h3&gt;&lt;p&gt;借用有两条铁律：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;任意时刻，可以有 &lt;strong&gt;多个不可变引用&lt;/strong&gt; &lt;code&gt;&amp;amp;T&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;或者 &lt;strong&gt;一个可变引用&lt;/strong&gt; &lt;code&gt;&amp;amp;mut T&lt;/code&gt;，两者不能共存&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;这两条规则强制实现了一个不变量：&lt;strong&gt;同一时间，要么多人读，要么一人写，不能同时发生&lt;/strong&gt;。&lt;/p&gt;
+&lt;h3 id="这条规则顺手杀死了-data-race"&gt;&lt;a href="#%e8%bf%99%e6%9d%a1%e8%a7%84%e5%88%99%e9%a1%ba%e6%89%8b%e6%9d%80%e6%ad%bb%e4%ba%86-data-race" class="header-anchor"&gt;&lt;/a&gt;这条规则顺手杀死了 data race
+&lt;/h3&gt;&lt;p&gt;数据竞争 (data race) 在多线程编程里是出了名的难调。两个线程同时改一个变量，没有锁保护，结果完全不可预测。&lt;/p&gt;
+&lt;p&gt;但仔细想想：data race 的本质，就是&amp;quot;同时存在两个引用，且其中一个是 &lt;code&gt;&amp;amp;mut&lt;/code&gt;&amp;quot;。Rust 的借用规则在编译期就把这种情况挡死了。&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;vec!&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r1&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 编译错误：不能同时有两个 &amp;amp;mut
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;r1&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这段代码编译不过。换 Java 它会跑得很欢，然后在某个深夜因为竞态条件挂掉。&lt;/p&gt;
+&lt;h3 id="一个类比"&gt;&lt;a href="#%e4%b8%80%e4%b8%aa%e7%b1%bb%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;一个类比
+&lt;/h3&gt;&lt;p&gt;想象一块白板。借用规则说：要么一群人围观白板（多个 &lt;code&gt;&amp;amp;&lt;/code&gt;），要么一个人独自擦写（一个 &lt;code&gt;&amp;amp;mut&lt;/code&gt;）。前者保证白板内容不被改，后者保证没人看到擦一半的中间状态。这两件事在物理上不能同时发生，Rust 把这个物理常识编进了语言。&lt;/p&gt;
+&lt;h2 id="第三道怎么避免无效内存"&gt;&lt;a href="#%e7%ac%ac%e4%b8%89%e9%81%93%e6%80%8e%e4%b9%88%e9%81%bf%e5%85%8d%e6%97%a0%e6%95%88%e5%86%85%e5%ad%98" class="header-anchor"&gt;&lt;/a&gt;第三道：怎么避免无效内存？
+&lt;/h2&gt;&lt;p&gt;无效内存主要来自两种情况：&lt;strong&gt;空指针&lt;/strong&gt; 和 &lt;strong&gt;data race&lt;/strong&gt;。后者借用规则已经顺手解决了，剩下的就是空指针。&lt;/p&gt;
+&lt;h3 id="rust-没有-null"&gt;&lt;a href="#rust-%e6%b2%a1%e6%9c%89-null" class="header-anchor"&gt;&lt;/a&gt;Rust 没有 null
+&lt;/h3&gt;&lt;p&gt;Tony Hoare 把 null 引入 ALGOL 称为自己&amp;quot;十亿美元的错误&amp;quot;。Rust 干脆把 null 从语言里删掉了。&lt;/p&gt;
+&lt;p&gt;那&amp;quot;没有值&amp;quot;怎么表达？用 &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt;：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;enum&lt;/span&gt; &lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这个 enum 看起来平平无奇，但它的杀伤力在于：&lt;strong&gt;你必须显式处理 None，不能假装它不存在&lt;/strong&gt;。&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;: &lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nb"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;find_user&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;id&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 编译错误：不能直接当 String 用
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// println!(&amp;#34;{}&amp;#34;, name.len());
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 必须显式处理
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="si"&gt;{}&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;user not found&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;对比 Java：&lt;code&gt;String name = findUser(id); name.length()&lt;/code&gt; 这段代码能编译通过，然后在 name 为 null 时抛 NullPointerException。Rust 让你根本写不出这种代码。&lt;/p&gt;
+&lt;p&gt;&lt;img alt="Option 像薛定谔的盒子" class="gallery-image" data-flex-basis="440px" data-flex-grow="183" height="768" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/option-box.png" srcset="https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/option-box_hu_36d5b75fb309ffd9.png 800w, https://Orangex-position0.github.io/posts/rust/rust-memory-model-from-scratch/images/option-box.png 1408w" width="1408"&gt;&lt;/p&gt;
+&lt;h3 id="一个反复出现的模式"&gt;&lt;a href="#%e4%b8%80%e4%b8%aa%e5%8f%8d%e5%a4%8d%e5%87%ba%e7%8e%b0%e7%9a%84%e6%a8%a1%e5%bc%8f" class="header-anchor"&gt;&lt;/a&gt;一个反复出现的模式
+&lt;/h3&gt;&lt;p&gt;到这里你可能注意到了：&lt;strong&gt;Rust 把运行时错误挪到了编译期&lt;/strong&gt;。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;内存泄漏 → 所有权规则&lt;/li&gt;
+&lt;li&gt;数据竞争 → 借用规则&lt;/li&gt;
+&lt;li&gt;空指针 → Option 强制 match&lt;/li&gt;
+&lt;li&gt;资源泄漏 → Drop trait&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这就是&amp;quot;零成本抽象&amp;quot;的真正含义：&lt;strong&gt;你不需要为安全付出运行时代价，但需要付出学习曲线的代价&lt;/strong&gt;。&lt;/p&gt;
+&lt;h2 id="收尾第三条路的代价与回报"&gt;&lt;a href="#%e6%94%b6%e5%b0%be%e7%ac%ac%e4%b8%89%e6%9d%a1%e8%b7%af%e7%9a%84%e4%bb%a3%e4%bb%b7%e4%b8%8e%e5%9b%9e%e6%8a%a5" class="header-anchor"&gt;&lt;/a&gt;收尾：第三条路的代价与回报
+&lt;/h2&gt;&lt;p&gt;回到开头的对比表。GC 用运行时开销换来了安全，C 用危险换来了自由，Rust 选了第三条路：&lt;strong&gt;用编译期的复杂性换运行时的零成本&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;这条路不是免费的。借用检查器最初会让你怀疑人生，lifetime 标注会让你想念 GC 的温柔。无数新人卡在 &amp;ldquo;fighting the borrow checker&amp;rdquo; 阶段。&lt;/p&gt;
+&lt;p&gt;但回报是：&lt;strong&gt;你写出的并发代码，编译通过基本意味着没有数据竞争&lt;/strong&gt;。这个说法不算夸张。前面提到约 70% 的安全漏洞是内存安全问题，Rust 在编译期把它们消灭了。&lt;/p&gt;
+&lt;p&gt;Rust 内存模型的真正天才之处，不在于它发明了什么新概念。所有权、借用、生命周期，每个单独看都不新鲜。天才之处在于把它们组合起来，让&amp;quot;内存安全&amp;quot;从程序员的自觉，变成了语言机制的强制保证。&lt;/p&gt;
+&lt;p&gt;从这个角度看，Rust 解决内存问题的方式更像一种哲学转变：&lt;strong&gt;与其事后修复，不如事前阻止&lt;/strong&gt;。&lt;/p&gt;
+&lt;h2 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=XGtWsfnnvh0" target="_blank" rel="noopener"
+ &gt;The genius of Rust&amp;rsquo;s memory model - YouTube&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html" target="_blank" rel="noopener"
+ &gt;The Rust Programming Language - Understanding Ownership&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>Rust 迭代器的三个核心 Trait：Iterator、IntoIterator、FromIterator</title><link>https://Orangex-position0.github.io/posts/rust/rust-iterator-three-core-traits/</link><pubDate>Tue, 09 Jun 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-iterator-three-core-traits/</guid><description>&lt;h2 id="引言"&gt;&lt;a href="#%e5%bc%95%e8%a8%80" class="header-anchor"&gt;&lt;/a&gt;引言
 &lt;/h2&gt;&lt;p&gt;Rust 标准库中，迭代器无处不在。&lt;code&gt;for&lt;/code&gt; 循环、&lt;code&gt;map&lt;/code&gt;/&lt;code&gt;filter&lt;/code&gt;/&lt;code&gt;collect&lt;/code&gt; 链式调用、&lt;code&gt;vec!.into_iter()&lt;/code&gt; —— 这些日常操作背后，由三个 trait 协同支撑：&lt;/p&gt;
 &lt;table&gt;
 	&lt;thead&gt;
