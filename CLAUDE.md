@@ -103,6 +103,32 @@ content/posts/
 └── computer-fundamentals/ # 计算机基础
 ```
 
+### Page Bundle
+
+利用 Hugo 的 Page Bundle 功能，将资源（图片、附件等）与页面绑定，便于内容与资源统一管理。Hugo 中主要有两种 Bundle：
+
+- **Leaf Bundle（叶子节点）**：管理单个页面的内容和附件集合，使用 `index.md` 作为主页面
+- **Branch Bundle（分支节点）**：管理内容集合（如列表页、章节），使用 `_index.md` 作为入口
+
+目录结构示例：
+
+```text
+content/
+├── about/
+│   └── index.md              # Leaf Bundle（单页面）
+├── posts/
+│   ├── _index.md             # Branch Bundle（文章列表页）
+│   ├── my-post/
+│   │   ├── index.md          # Leaf Bundle（文章主页面）
+│   │   ├── image1.jpg        # 文章关联的资源
+│   │   └── image2.png
+│   └── my-other-post/
+│       └── index.md          # Leaf Bundle
+└── categories/               # Branch Bundle（自动生成）
+```
+
+文章中需要嵌入图片时，优先使用 Leaf Bundle 组织，而非将图片放到全局 `static/` 目录；在 Markdown 中通过相对路径或 `resources` 引用 Bundle 内资源。
+
 ### 菜单配置
 主菜单在 `hugo.toml` 中配置，包含：首页、文章、分类、标签、关于。
 
