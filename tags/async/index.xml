@@ -1,4 +1,341 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Async on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/async/</link><description>Recent content in Async on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sun, 26 Apr 2026 15:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/async/index.xml" rel="self" type="application/rss+xml"/><item><title>手写 Rust Async Model（六）：与 Tokio 相比</title><link>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</link><pubDate>Sun, 26 Apr 2026 15:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</guid><description>&lt;h2 id="背景--问题我们做到了哪一步"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98%e6%88%91%e4%bb%ac%e5%81%9a%e5%88%b0%e4%ba%86%e5%93%aa%e4%b8%80%e6%ad%a5" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题：我们做到了哪一步？
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Async on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/async/</link><description>Recent content in Async on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Mon, 13 Jul 2026 10:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/async/index.xml" rel="self" type="application/rss+xml"/><item><title>Tokio Runtime 架构剖析：一个 Task 的诞生与旅程</title><link>https://Orangex-position0.github.io/posts/rust/tokio-runtime-architecture/</link><pubDate>Mon, 13 Jul 2026 10:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/tokio-runtime-architecture/</guid><description>&lt;h2 id="前言"&gt;&lt;a href="#%e5%89%8d%e8%a8%80" class="header-anchor"&gt;&lt;/a&gt;前言
+&lt;/h2&gt;&lt;p&gt;最近在学习 Rust 时，发现其异步虽然和 JavaScript 的异步模型有相似之处，但 Rust 只提供了异步语法和 &lt;code&gt;Future&lt;/code&gt; 抽象，而没有内置运行时，因此需要依赖异步运行时（runtime）来驱动 async 程序运行。&lt;/p&gt;
+&lt;p&gt;而 Rust 中最流行的异步运行时就是 Tokio。那么今天就来解析一下 Tokio Runtime 的架构，看看它是如何驱动成千上万个异步任务的。&lt;/p&gt;
+&lt;h2 id="背景--问题"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题
+&lt;/h2&gt;&lt;p&gt;Rust 中的 &lt;code&gt;async fn&lt;/code&gt; 是惰性的——它编译成一个 Future 状态机，&lt;strong&gt;没人 &lt;code&gt;poll&lt;/code&gt; 它就永远不执行&lt;/strong&gt;。那么一个自然的问题来了：&lt;/p&gt;
+
+ &lt;blockquote&gt;
+ &lt;p&gt;当你写下 &lt;code&gt;#[tokio::main]&lt;/code&gt; 并 &lt;code&gt;spawn&lt;/code&gt; 成千上万个 task，这些 task 到底是谁在 &lt;code&gt;poll&lt;/code&gt;？多核怎么分配？等 IO 时线程为什么没卡死？&lt;/p&gt;
+
+ &lt;/blockquote&gt;
+&lt;p&gt;要回答这个问题，就得了解 Tokio Runtime 内部，看清它的运作机制，而不是停留在&amp;quot;会用 &lt;code&gt;tokio::spawn&lt;/code&gt;&amp;ldquo;的层面。&lt;/p&gt;
+&lt;p&gt;如果你想知道这些机制&lt;strong&gt;从零怎么造出来&lt;/strong&gt;，可以看我写的《手写 Rust Async Model》系列；而这一篇反过来——&lt;strong&gt;看生产级的 Tokio 是怎么把那些原理工程化的&lt;/strong&gt;。&lt;/p&gt;
+&lt;h3 id="能学到什么"&gt;&lt;a href="#%e8%83%bd%e5%ad%a6%e5%88%b0%e4%bb%80%e4%b9%88" class="header-anchor"&gt;&lt;/a&gt;能学到什么
+&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;Tokio Runtime 的四大组件（Task / Scheduler / Queue / Reactor）各自的角色&lt;/li&gt;
+&lt;li&gt;混合队列、work-stealing、Park/Unpark 这几套机制如何协作&lt;/li&gt;
+&lt;li&gt;一条 task 从 &lt;code&gt;spawn&lt;/code&gt; 到完成的完整旅程&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="一段再普通不过的代码"&gt;&lt;a href="#%e4%b8%80%e6%ae%b5%e5%86%8d%e6%99%ae%e9%80%9a%e4%b8%8d%e8%bf%87%e7%9a%84%e4%bb%a3%e7%a0%81" class="header-anchor"&gt;&lt;/a&gt;一段再普通不过的代码
+&lt;/h3&gt;&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;::&lt;span class="n"&gt;time&lt;/span&gt;::&lt;span class="n"&gt;Duration&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cp"&gt;#[tokio::main]&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;handles&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;vec!&lt;/span&gt;&lt;span class="p"&gt;[];&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="o"&gt;..=&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;handles&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;spawn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 每个 task 睡不同的时间后返回编号
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;time&lt;/span&gt;::&lt;span class="n"&gt;sleep&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Duration&lt;/span&gt;::&lt;span class="n"&gt;from_millis&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;500&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u64&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="k"&gt;await&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}));&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;h&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;handles&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="fm"&gt;println!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;done: &lt;/span&gt;&lt;span class="si"&gt;{}&lt;/span&gt;&lt;span class="s"&gt;&amp;#34;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;h&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="k"&gt;await&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;3 个 task 并发 &lt;code&gt;sleep&lt;/code&gt;，代码非常简单，底层却是 tokio runtime 的一套精密协作。下面我们用四个问题把它逐层拆开。&lt;/p&gt;
+&lt;h2 id="方案用四个问题拆开-runtime"&gt;&lt;a href="#%e6%96%b9%e6%a1%88%e7%94%a8%e5%9b%9b%e4%b8%aa%e9%97%ae%e9%a2%98%e6%8b%86%e5%bc%80-runtime" class="header-anchor"&gt;&lt;/a&gt;方案：用四个问题拆开 Runtime
+&lt;/h2&gt;&lt;p&gt;先看一张全景图，建立整体印象，再逐个问题深入：&lt;/p&gt;
+&lt;p&gt;&lt;img alt="Tokio Runtime 整体架构：Worker 线程池 + 混合队列 + Reactor" class="gallery-image" data-flex-basis="309px" data-flex-grow="129" height="824" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/rust/tokio-runtime-architecture/images/tokio-runtime-overview.png" srcset="https://Orangex-position0.github.io/posts/rust/tokio-runtime-architecture/images/tokio-runtime-overview_hu_494e9b8485aea66d.png 800w, https://Orangex-position0.github.io/posts/rust/tokio-runtime-architecture/images/tokio-runtime-overview.png 1064w" width="1064"&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Worker 之间&lt;/strong&gt;互相 steal，没有中心调度器&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Reactor&lt;/strong&gt; 在底部桥接 OS，事件就绪时唤醒对应 task&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="q1async-fn-编译成了-future谁来-poll-它"&gt;&lt;a href="#q1async-fn-%e7%bc%96%e8%af%91%e6%88%90%e4%ba%86-future%e8%b0%81%e6%9d%a5-poll-%e5%ae%83" class="header-anchor"&gt;&lt;/a&gt;Q1：async fn 编译成了 Future，谁来 poll 它？
+&lt;/h3&gt;&lt;p&gt;先明确一个前提：&lt;code&gt;async fn&lt;/code&gt; 编译成一个状态机 Future，&lt;strong&gt;不主动 &lt;code&gt;poll&lt;/code&gt; 就不会执行&lt;/strong&gt;。Tokio 的回答是 &lt;strong&gt;Worker 线程 + Executor&lt;/strong&gt;。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;multi_thread&lt;/code&gt; runtime 启动时，会 spawn 一个 worker 线程池，默认数量 = CPU 核心数&lt;/li&gt;
+&lt;li&gt;每个 worker 线程跑一个调度循环：&lt;strong&gt;取 task → poll → 处理结果 → 再取&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;这个循环，就是 Executor 的本质&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;code&gt;#[tokio::main]&lt;/code&gt; 宏会把 &lt;code&gt;async fn main&lt;/code&gt; 展开成大致这样的同步 &lt;code&gt;main&lt;/code&gt;，一次性搭起整套基础设施：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 构建一个多线程 runtime：启动 worker 线程池 + Reactor
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;runtime&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;runtime&lt;/span&gt;::&lt;span class="n"&gt;Builder&lt;/span&gt;::&lt;span class="n"&gt;new_multi_thread&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;enable_all&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;build&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 在 runtime 上阻塞地驱动 async main 这个 Future
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;runtime&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;block_on&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;async_main&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这一步建立了 N 个 worker 线程、各自的 Local Queue、共享的 Global Queue、以及 Reactor，后续所有 task 都在这个环境里跑。&lt;/p&gt;
+&lt;p&gt;它本质上就是一个 &lt;code&gt;poll&lt;/code&gt; 循环（如果你手写过最简 Executor，会立刻认出这个结构），只是从单线程升级成了线程池：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;最简版： 一个线程 + 一个就绪队列 + 一个 poll 循环
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Tokio： N 个线程 + 每线程一个 Local Queue + work-stealing
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h3 id="q2tokio-runtime-中为什么能并发上万个-task"&gt;&lt;a href="#q2tokio-runtime-%e4%b8%ad%e4%b8%ba%e4%bb%80%e4%b9%88%e8%83%bd%e5%b9%b6%e5%8f%91%e4%b8%8a%e4%b8%87%e4%b8%aa-task" class="header-anchor"&gt;&lt;/a&gt;Q2：Tokio Runtime 中为什么能并发上万个 Task?
+&lt;/h3&gt;&lt;p&gt;关键概念：&lt;strong&gt;Task = 绿色线程&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;当一个 &lt;code&gt;Future&lt;/code&gt; 被 runtime 接管，它会被封装成一个 Task，内部包含：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Future 状态机本体&lt;/li&gt;
+&lt;li&gt;Waker（唤醒机制）&lt;/li&gt;
+&lt;li&gt;调度所需的元数据&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;它不是 OS 线程，而是&lt;strong&gt;用户态的轻量执行单元&lt;/strong&gt;，结构本身约 64 bytes 级别。这带来一个关键模型：&lt;/p&gt;
+
+ &lt;blockquote&gt;
+ &lt;p&gt;&lt;strong&gt;M:N 模型&lt;/strong&gt; —— M 个 task 复用 N 个 worker 线程（N 通常 = 核心数）&lt;/p&gt;
+
+ &lt;/blockquote&gt;
+&lt;p&gt;对比一下开销：&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;单位&lt;/th&gt;
+					&lt;th&gt;栈 / 占用&lt;/th&gt;
+					&lt;th&gt;1 万个的开销&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;OS 线程&lt;/td&gt;
+					&lt;td&gt;默认 MB 级栈&lt;/td&gt;
+					&lt;td&gt;约 10 GB，不可行&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Task&lt;/td&gt;
+					&lt;td&gt;约 64 bytes 级&lt;/td&gt;
+					&lt;td&gt;约 几百 KB，轻松&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;但有个常被误解的点要澄清：&lt;strong&gt;task 的&amp;quot;并行&amp;quot;上限 = worker 线程数 N&lt;/strong&gt;。所谓&amp;quot;并发上万个&amp;rdquo;，是上万个 task 在 N 个线程上&lt;strong&gt;分时复用&lt;/strong&gt;，而不是真的同时跑上万个。并发（concurrent）≠ 并行（parallel）。&lt;/p&gt;
+&lt;h3 id="q3tokio-是如何压榨-cpu-多核性能的"&gt;&lt;a href="#q3tokio-%e6%98%af%e5%a6%82%e4%bd%95%e5%8e%8b%e6%a6%a8-cpu-%e5%a4%9a%e6%a0%b8%e6%80%a7%e8%83%bd%e7%9a%84" class="header-anchor"&gt;&lt;/a&gt;Q3：Tokio 是如何压榨 CPU 多核性能的？
+&lt;/h3&gt;&lt;p&gt;这是 Tokio 性能设计的核心：&lt;strong&gt;混合队列模型（Hybrid Queue）&lt;/strong&gt;。&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;队列&lt;/th&gt;
+					&lt;th&gt;归属&lt;/th&gt;
+					&lt;th&gt;特点&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Local Queue&lt;/td&gt;
+					&lt;td&gt;每个 worker 独享&lt;/td&gt;
+					&lt;td&gt;所属 worker 无锁访问、cache 友好、ring buffer（约 256 slot）&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Global Queue&lt;/td&gt;
+					&lt;td&gt;全 runtime 共享&lt;/td&gt;
+					&lt;td&gt;需要加锁，用于跨 worker 分发与负载均衡&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;strong&gt;为什么这么设计？&lt;/strong&gt; 假设把所有 task 都丢进一个全局队列，那么每次取任务、放任务都要抢同一把锁，N 个线程会陷入经典的锁竞争瓶颈。&lt;/p&gt;
+&lt;p&gt;Tokio 的做法是让&amp;quot;快路径&amp;quot;绕开锁：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;task 优先进入&lt;strong&gt;当前 worker 的 Local Queue&lt;/strong&gt;，取/放都无需互斥锁&lt;/li&gt;
+&lt;li&gt;Local Queue 基于 ring buffer，队列头部常驻 CPU L1 Cache，取下一个 task 极快&lt;/li&gt;
+&lt;li&gt;只有需要跨 worker 分发的 task（比如 &lt;code&gt;spawn&lt;/code&gt; 时不在 worker 上下文里，或 Local Queue 已满溢出）才进 Global Queue&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;于是 worker 取任务的优先级链是：&lt;/p&gt;
+&lt;pre class="mermaid" style="visibility:hidden"&gt;flowchart
+ A[获取任务优先级] --&gt; B{Local Queue是否有任务?}
+ B -- 有 --&gt; C[从Local Queue取任务执行]
+ B -- 无 --&gt; D{Global Queue是否有任务?}
+ D -- 有 --&gt; E[从Global Queue取任务执行]
+ D -- 无 --&gt; F[执行Work Stealing]
+ F --&gt; G[从其他繁忙线程窃取任务]&lt;/pre&gt;&lt;p&gt;绝大多数情况下，worker 都在走第 1 步这条无锁快路径。&lt;/p&gt;
+&lt;h3 id="q4某个-worker-空了怎么办"&gt;&lt;a href="#q4%e6%9f%90%e4%b8%aa-worker-%e7%a9%ba%e4%ba%86%e6%80%8e%e4%b9%88%e5%8a%9e" class="header-anchor"&gt;&lt;/a&gt;Q4：某个 worker 空了，怎么办？
+&lt;/h3&gt;&lt;p&gt;Tokio 用到了 &lt;strong&gt;Work Stealing（工作窃取）&lt;/strong&gt; 来解决各 Worker 负载均衡的问题。这是一种&lt;strong&gt;并行任务调度算法（Scheduling Algorithm）&lt;/strong&gt;，在其他语言也有类似实现。（比如 Java 的 ForkJoinPool；Go 的 GMP Scheduler 等）&lt;/p&gt;
+&lt;p&gt;它在 Tokio 里的运作机制：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;触发时机&lt;/strong&gt;：当前 worker 的 Local Queue 和 Global Queue 都没有可执行任务&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;执行逻辑&lt;/strong&gt;：随机选一个其他 worker，从它的 Local Queue 窃取&lt;strong&gt;大约一半&lt;/strong&gt;的任务，搬回自己的 Local Queue 继续执行&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;效果&lt;/strong&gt;：忙的 worker 被偷、闲的 worker 有活干，负载自动均衡&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这套机制的好处是&lt;strong&gt;没有中心调度器&lt;/strong&gt;——不像 master-slave 那样有个分发瓶颈，每个 worker 既干活又互相协调。&lt;/p&gt;
+&lt;h3 id="q5task-在等-io--sleepworker-线程为什么没卡死"&gt;&lt;a href="#q5task-%e5%9c%a8%e7%ad%89-io--sleepworker-%e7%ba%bf%e7%a8%8b%e4%b8%ba%e4%bb%80%e4%b9%88%e6%b2%a1%e5%8d%a1%e6%ad%bb" class="header-anchor"&gt;&lt;/a&gt;Q5：task 在等 IO / sleep，worker 线程为什么没卡死？
+&lt;/h3&gt;&lt;p&gt;这是 Reactor 登场的地方，也是事件驱动模型真正发挥价值的环节。&lt;/p&gt;
+&lt;p&gt;Reactor 是连接&lt;strong&gt;异步任务&lt;/strong&gt;和&lt;strong&gt;OS&lt;/strong&gt;的桥梁，负责监听和管理异步 I/O 事件。&lt;/p&gt;
+&lt;p&gt;当某个 task 的 Future 返回 &lt;code&gt;Pending&lt;/code&gt;（比如 &lt;code&gt;sleep&lt;/code&gt; 时间没到、socket 没数据），流程是这样的：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-fallback" data-lang="fallback"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;1. Future 把自己的 Waker 注册到 Reactor
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;2. worker 不阻塞，立刻去取下一个 task 继续跑
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;3. Reactor 基于 mio，底层是 OS 事件机制
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; - Linux：epoll
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; - macOS / BSD：kqueue
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; - Windows：IOCP
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;4. OS 通知&amp;#34;事件就绪&amp;#34; → Reactor 找到对应的 Waker，并调用 wake() 方法唤醒 task
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;5. task 被重新标记为 Runnable，放回队列
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;6. 某个 worker 取到它，再次 poll
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;而 worker 在&amp;quot;实在没任务可做、也偷不到任务&amp;quot;时才会 &lt;strong&gt;Park（挂起）&lt;/strong&gt;，被 &lt;code&gt;wake&lt;/code&gt; 时 &lt;strong&gt;Unpark&lt;/strong&gt; 恢复。这个 &lt;strong&gt;Park / Unpark 循环&lt;/strong&gt; 让线程既不空转烧 CPU，也不会死锁阻塞。&lt;/p&gt;
+&lt;h2 id="实现步骤一条-task-的完整旅程"&gt;&lt;a href="#%e5%ae%9e%e7%8e%b0%e6%ad%a5%e9%aa%a4%e4%b8%80%e6%9d%a1-task-%e7%9a%84%e5%ae%8c%e6%95%b4%e6%97%85%e7%a8%8b" class="header-anchor"&gt;&lt;/a&gt;实现步骤：一条 task 的完整旅程
+&lt;/h2&gt;&lt;p&gt;把上面五个问题串联起来，一个 Tokio Task 的完整生命周期如下图：&lt;/p&gt;
+&lt;pre class="mermaid" style="visibility:hidden"&gt;flowchart TD
+ subgraph 初始化与任务创建
+ A[生成Future → 封装为Task]
+ end
+ subgraph 入队调度
+ B[混合队列入队：&lt;br/&gt;本地优先，满则全局]
+ end
+ subgraph 执行/IO挂起
+ C[执行Future；&lt;br/&gt;IO阻塞时Reactor挂起Task]
+ end
+ subgraph IO唤醒恢复
+ D[IO就绪，Waker唤醒&lt;br/&gt;重新入队]
+ end
+ E[任务执行完毕]
+
+ A --&gt; B
+ B --&gt; C
+ C -- IO等待 --&gt; D
+ D --&gt; C
+ C -- 无阻塞完成 --&gt; E&lt;/pre&gt;&lt;p&gt;下面按生命周期展开，对照开头那段并发 &lt;code&gt;sleep&lt;/code&gt; 代码，看看 3 个 task 到底经历了什么。&lt;/p&gt;
+&lt;h3 id="创建与入队"&gt;&lt;a href="#%e5%88%9b%e5%bb%ba%e4%b8%8e%e5%85%a5%e9%98%9f" class="header-anchor"&gt;&lt;/a&gt;创建与入队
+&lt;/h3&gt;&lt;p&gt;循环里每调用一次 &lt;code&gt;tokio::spawn&lt;/code&gt;：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;spawn&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;time&lt;/span&gt;::&lt;span class="n"&gt;sleep&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;.).&lt;/span&gt;&lt;span class="k"&gt;await&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;runtime 把这个 Future &lt;strong&gt;封装成一个 Task&lt;/strong&gt;（约 64 bytes 的绿色线程），优先放入当前 worker 的 Local Queue（满了则溢出到 Global Queue）。从此它有了被调度的资格。&lt;/p&gt;
+&lt;h3 id="执行与挂起"&gt;&lt;a href="#%e6%89%a7%e8%a1%8c%e4%b8%8e%e6%8c%82%e8%b5%b7" class="header-anchor"&gt;&lt;/a&gt;执行与挂起
+&lt;/h3&gt;&lt;p&gt;某个 worker 从 Local Queue 取出 Task，开始 &lt;code&gt;poll&lt;/code&gt;：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;第一次 &lt;code&gt;poll&lt;/code&gt; 时，&lt;code&gt;sleep&lt;/code&gt; 时间没到&lt;/li&gt;
+&lt;li&gt;Future 把自己的 &lt;code&gt;Waker&lt;/code&gt; 注册到 runtime：&lt;strong&gt;socket 等 IO 经 mio 挂到 epoll / kqueue / IOCP；&lt;code&gt;sleep&lt;/code&gt; 这类定时器则注册到 runtime 内部的 timer&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;Future 返回 &lt;code&gt;Pending&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;worker 不等待&lt;/strong&gt;，立刻去取下一个 task&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这就是为什么 3 个 task 能&amp;quot;并发&amp;quot;——它们在 &lt;code&gt;sleep&lt;/code&gt; 期间并不占用 worker，worker 一直在处理别的就绪 task。&lt;/p&gt;
+&lt;h3 id="唤醒与完成"&gt;&lt;a href="#%e5%94%a4%e9%86%92%e4%b8%8e%e5%ae%8c%e6%88%90" class="header-anchor"&gt;&lt;/a&gt;唤醒与完成
+&lt;/h3&gt;&lt;p&gt;事件就绪后，对应的 &lt;code&gt;Waker&lt;/code&gt; 被触发：&lt;strong&gt;IO 由 OS 经 epoll / kqueue / IOCP 通知 Reactor；定时器由 runtime 内部 timer 到期触发&lt;/strong&gt;。&lt;code&gt;Waker.wake()&lt;/code&gt; 会把 task 标记为 Runnable、放回队列，必要时 &lt;code&gt;unpark&lt;/code&gt; 一个休眠的 worker。&lt;/p&gt;
+&lt;p&gt;被唤醒的 task 再次被 worker 取出、&lt;code&gt;poll&lt;/code&gt;。这次 &lt;code&gt;sleep&lt;/code&gt; 已到期，Future 推进到 &lt;code&gt;Ready&lt;/code&gt;，返回编号 &lt;code&gt;i&lt;/code&gt;，Task 完成被回收。&lt;/p&gt;
+&lt;p&gt;最终 &lt;code&gt;h.await&lt;/code&gt; 拿到返回值，打印 &lt;code&gt;done: 1 / 2 / 3&lt;/code&gt;。整个过程中，worker 线程数始终是 N 个，却&amp;quot;同时&amp;quot;推进了 3 个甚至更多 task。&lt;/p&gt;
+&lt;h2 id="示例--踩坑"&gt;&lt;a href="#%e7%a4%ba%e4%be%8b--%e8%b8%a9%e5%9d%91" class="header-anchor"&gt;&lt;/a&gt;示例 &amp;amp; 踩坑
+&lt;/h2&gt;&lt;h3 id="踩坑-1在-async-里写阻塞调用拖垮整个-worker"&gt;&lt;a href="#%e8%b8%a9%e5%9d%91-1%e5%9c%a8-async-%e9%87%8c%e5%86%99%e9%98%bb%e5%a1%9e%e8%b0%83%e7%94%a8%e6%8b%96%e5%9e%ae%e6%95%b4%e4%b8%aa-worker" class="header-anchor"&gt;&lt;/a&gt;踩坑 1：在 async 里写阻塞调用，拖垮整个 worker
+&lt;/h3&gt;&lt;p&gt;这是新手最容易踩、也最隐蔽的坑：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;bad_task&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 错误：直接在 async 里阻塞
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 这会卡死当前 worker 线程，导致该线程上的其它 task 全部跟着卡住
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;::&lt;span class="n"&gt;thread&lt;/span&gt;::&lt;span class="n"&gt;sleep&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;::&lt;span class="n"&gt;time&lt;/span&gt;::&lt;span class="n"&gt;Duration&lt;/span&gt;::&lt;span class="n"&gt;from_secs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;为什么严重？因为 worker 线程数有限（通常 = 核心数）。一个 task 把 worker 阻塞住，这个 worker 上的 Local Queue 里所有 task 都得排队等它。如果几个 task 同时这么干，整个 runtime 的吞吐会直接塌掉——&lt;strong&gt;这正是 Q5 里 Reactor 要极力避免的场景&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;正确做法是用 &lt;code&gt;spawn_blocking&lt;/code&gt;，把阻塞操作丢到&lt;strong&gt;独立的阻塞线程池&lt;/strong&gt;：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;good_task&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="c1"&gt;// 正确：阻塞操作交给专门的阻塞线程池，不占用 worker
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio&lt;/span&gt;::&lt;span class="n"&gt;task&lt;/span&gt;::&lt;span class="n"&gt;spawn_blocking&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;::&lt;span class="n"&gt;thread&lt;/span&gt;::&lt;span class="n"&gt;sleep&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;::&lt;span class="n"&gt;time&lt;/span&gt;::&lt;span class="n"&gt;Duration&lt;/span&gt;::&lt;span class="n"&gt;from_secs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="k"&gt;await&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;spawn_blocking&lt;/code&gt; 的线程池和 worker 线程池是分开的，专门用来吸收阻塞调用，不参与 work-stealing 的快路径。&lt;/p&gt;
+&lt;h3 id="踩坑-2选错-runtime-flavor"&gt;&lt;a href="#%e8%b8%a9%e5%9d%91-2%e9%80%89%e9%94%99-runtime-flavor" class="header-anchor"&gt;&lt;/a&gt;踩坑 2：选错 runtime flavor
+&lt;/h3&gt;&lt;p&gt;&lt;code&gt;#[tokio::main]&lt;/code&gt; 默认是 &lt;code&gt;multi_thread&lt;/code&gt;（worker 池 + work-stealing）。也可以显式选单线程：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-rust" data-lang="rust"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="c1"&gt;// 单线程 runtime：只有一个 worker，没有 work-stealing
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="cp"&gt;#[tokio::main(flavor = &lt;/span&gt;&lt;span class="s"&gt;&amp;#34;current_thread&amp;#34;&lt;/span&gt;&lt;span class="cp"&gt;)]&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;async&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="cm"&gt;/* ... */&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;选型建议：&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;场景&lt;/th&gt;
+					&lt;th&gt;选择&lt;/th&gt;
+					&lt;th&gt;原因&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;CPU 密集 + 高并发 IO（大多数服务端）&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;multi_thread&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;用满多核，work-stealing 自动均衡&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;简单 CLI、嵌入式、单核环境&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;current_thread&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;无线程切换开销，体积更小&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;纯 IO 绑定、低并发&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;current_thread&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;够用，省资源&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;记住：&lt;code&gt;current_thread&lt;/code&gt; 下没有 Q4 的 work-stealing，所有 task 都在一个线程上分时复用。&lt;/p&gt;
+&lt;h3 id="边界情况local-queue-会满"&gt;&lt;a href="#%e8%be%b9%e7%95%8c%e6%83%85%e5%86%b5local-queue-%e4%bc%9a%e6%bb%a1" class="header-anchor"&gt;&lt;/a&gt;边界情况：Local Queue 会满
+&lt;/h3&gt;&lt;p&gt;Local Queue 容量有限（约 256 个 slot）。当某个 worker 在极短时间内 &lt;code&gt;spawn&lt;/code&gt; 大量 task，超出容量时，&lt;strong&gt;溢出的 task 会被推入 Global Queue&lt;/strong&gt;，等待其他 worker 通过优先级链的第 2 步取走。这是混合队列模型自带的&amp;quot;泄压阀&amp;quot;，不会因为本地队列满而丢任务。&lt;/p&gt;
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
+&lt;/h2&gt;&lt;h3 id="tokio-runtime-核心组件"&gt;&lt;a href="#tokio-runtime-%e6%a0%b8%e5%bf%83%e7%bb%84%e4%bb%b6" class="header-anchor"&gt;&lt;/a&gt;📦Tokio Runtime 核心组件
+&lt;/h3&gt;&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;组件&lt;/th&gt;
+					&lt;th&gt;核心说明&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Task&lt;/td&gt;
+					&lt;td&gt;轻量级任务单元，仅占用 64 Bytes，是最小可调度工作载体&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Queue&lt;/td&gt;
+					&lt;td&gt;采用本地队列 + 全局队列 + 任务窃取的混合调度队列模型&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Scheduler/Executor&lt;/td&gt;
+					&lt;td&gt;负责任务分发、调度与实际执行，管理线程任务流转&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Reactor&lt;/td&gt;
+					&lt;td&gt;基于 Mio 实现的 IO 事件驱动层，维护线程阻塞（Park）与唤醒（Unpark）循环&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id="一些相关概念"&gt;&lt;a href="#%e4%b8%80%e4%ba%9b%e7%9b%b8%e5%85%b3%e6%a6%82%e5%bf%b5" class="header-anchor"&gt;&lt;/a&gt;一些相关概念
+&lt;/h3&gt;&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Task = 绿色线程&lt;/strong&gt;：约 64 bytes 的用户态执行单元，M:N 模型让上万个 task 复用 N 个 worker 线程&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;混合队列&lt;/strong&gt;：Local Queue（无锁快路径）+ Global Queue（跨 worker 分发），让多核协作不退化为锁竞争&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Work Stealing&lt;/strong&gt;：worker 空了就随机偷别人&amp;quot;一半&amp;quot;的任务，无中心调度器也能负载均衡&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Reactor + Park/Unpark&lt;/strong&gt;：task 等 IO 时不占线程，OS 事件就绪再唤醒，线程空了才挂起&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id="原理--工业实现"&gt;&lt;a href="#%e5%8e%9f%e7%90%86--%e5%b7%a5%e4%b8%9a%e5%ae%9e%e7%8e%b0" class="header-anchor"&gt;&lt;/a&gt;原理 → 工业实现
+&lt;/h3&gt;&lt;p&gt;Tokio 的每一处工程化设计，本质上都是对 Rust 的异步运行时基础框架在生产环境下的回答：&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;基础原理&lt;/th&gt;
+					&lt;th&gt;Tokio 的工业实现&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Future（状态机）&lt;/td&gt;
+					&lt;td&gt;Task（绿色线程，封装 Future + Waker）&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;单线程 poll 循环&lt;/td&gt;
+					&lt;td&gt;Worker 线程池 + 混合队列&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;就绪队列&lt;/td&gt;
+					&lt;td&gt;Local Queue（无锁）+ Global Queue&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;负载均衡&lt;/td&gt;
+					&lt;td&gt;Work Stealing&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Reactor（事件监听）&lt;/td&gt;
+					&lt;td&gt;基于 mio 的 epoll / kqueue / IOCP 事件循环&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;想从零理解这些原理的来龙去脉，推荐看我的《手写 Rust Async Model》系列——这一篇正是那套原理在生产运行时里的落点。&lt;/p&gt;
+&lt;h3 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
+&lt;/h3&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=FUg1y-yv6cs&amp;amp;list=WL&amp;amp;index=10&amp;amp;t=13s" target="_blank" rel="noopener"
+ &gt;How Rust engineered the perfect async runtime - Youtube&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://tokio.rs/tokio/tutorial" target="_blank" rel="noopener"
+ &gt;Tokio 官方教程&lt;/a&gt; —— 从使用角度系统学习 Tokio&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://github.com/tokio-rs/tokio" target="_blank" rel="noopener"
+ &gt;Tokio 源码&lt;/a&gt; —— &lt;code&gt;tokio/src/runtime/&lt;/code&gt; 下能看到 worker、queue、scheduler 的真实实现&lt;/li&gt;
+&lt;li&gt;《手写 Rust Async Model》系列 —— 本文所有概念&amp;quot;从零造出来&amp;quot;的版本&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>手写 Rust Async Model（六）：与 Tokio 相比</title><link>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</link><pubDate>Sun, 26 Apr 2026 15:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/handwriting-rust-async-model-06-compare-tokio/</guid><description>&lt;h2 id="背景--问题我们做到了哪一步"&gt;&lt;a href="#%e8%83%8c%e6%99%af--%e9%97%ae%e9%a2%98%e6%88%91%e4%bb%ac%e5%81%9a%e5%88%b0%e4%ba%86%e5%93%aa%e4%b8%80%e6%ad%a5" class="header-anchor"&gt;&lt;/a&gt;背景 &amp;amp; 问题：我们做到了哪一步？
 &lt;/h2&gt;&lt;p&gt;前面的五章，我们从零开始手写了一个简化版的 Rust 异步运行时：&lt;/p&gt;
 &lt;ol&gt;
 &lt;li&gt;&lt;strong&gt;Future Trait&lt;/strong&gt;：定义了异步任务的标准协议&lt;/li&gt;
