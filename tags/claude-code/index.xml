@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Claude Code on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/claude-code/</link><description>Recent content in Claude Code on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Fri, 31 Jul 2026 00:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/claude-code/index.xml" rel="self" type="application/rss+xml"/><item><title>从 Everything Claude Code 看 AI Coding Agent 的规则管理体系</title><link>https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/</link><pubDate>Fri, 31 Jul 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/</guid><description>&lt;h2 id="背景"&gt;&lt;a href="#%e8%83%8c%e6%99%af" class="header-anchor"&gt;&lt;/a&gt;背景
+&lt;/h2&gt;&lt;p&gt;这两年 Coding Agent 的变化很快。先是 Claude Code、Codex 这类工具进入日常开发流程，后来 Skills 开始流行，再到现在大家讨论 Harness、Hooks、Subagents、Plugins。表面上看，这些都是不同工具的新能力；放到一起看，其实都在解决同一个问题：怎样让 Agent 在足够自由的同时，仍然按我们预期的方式做事。&lt;/p&gt;
+&lt;p&gt;我一开始也把问题理解得比较简单：Rule 写好一点，Skill 写详细一点，Agent 就会稳定一点。于是我根据自己的工作流做了几个 Skill，也会从网上复制各种语言的 Rule 文档放进项目里。刚开始效果不错，但用得越久，问题越明显。&lt;/p&gt;
+&lt;p&gt;&lt;img alt="AI Coding Agent 的上下文过载：规则、文档和经验都被塞进默认上下文后，信号反而变弱" class="gallery-image" data-flex-basis="426px" data-flex-grow="177" height="941" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/1.png" srcset="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/1_hu_1795619df2579fb.png 800w, https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/1_hu_35165c7d20f325e0.png 1600w, https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/1.png 1672w" width="1672"&gt;&lt;/p&gt;
+&lt;p&gt;Rule 文件会慢慢变成一个杂物间。里面既有绝对不能违反的约束，也有语言最佳实践、代码正反例、工作流步骤、工具使用说明，甚至还有某次踩坑后的经验总结。每一条单独看都有道理，合在一起就很乱。&lt;/p&gt;
+&lt;p&gt;更麻烦的是，Rule 通常会直接进入 Agent 的启动上下文。它不像 Skill 那样按需加载，只要文件存在，Agent 每次做任务都要加载这些内容。Rule 越长，默认上下文越重，真正重要的红线反而容易被淹没。&lt;/p&gt;
+&lt;p&gt;所以我现在更倾向于把问题拆开看：AI Coding Agent 的规则管理，不是简单的全部一股脑塞进 Rule 中（就像写项目时没有提前规划架构，导致产生所谓“Spaghetti”式代码），而是一套按加载时机和职责边界分层的配置体系。&lt;/p&gt;
+&lt;h2 id="everything-claude-code-给我的启发"&gt;&lt;a href="#everything-claude-code-%e7%bb%99%e6%88%91%e7%9a%84%e5%90%af%e5%8f%91" class="header-anchor"&gt;&lt;/a&gt;Everything Claude Code 给我的启发
+&lt;/h2&gt;&lt;p&gt;&lt;a class="link" href="https://github.com/affaan-m/ECC" target="_blank" rel="noopener"
+ &gt;everything-claude-code&lt;/a&gt; 这个项目起初我只是作为一个 Rule 参考项目，但后来发现它的架构设计思路也很好，其将 Claude Code 周边的配置能力拆成了不同层：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;CLAUDE.md&lt;/code&gt; 负责默认记忆和项目上下文&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;rules/&lt;/code&gt; 负责常驻原则&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;skills/&lt;/code&gt; 负责按需加载的任务能力&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;commands/&lt;/code&gt; 负责固定任务入口&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;agents/&lt;/code&gt; 负责专门角色&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;hooks/&lt;/code&gt; 和 &lt;code&gt;settings&lt;/code&gt; 负责确定性自动化和权限配置&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这比单纯堆一个超长 Rule 文件更合理。因为不同内容的生命周期不一样，加载时机也不一样。&lt;/p&gt;
+&lt;p&gt;有些内容 Agent 每次都必须知道，比如不要覆盖用户未请求修改的文件、测试失败不能声称完成、不要泄露密钥。这类内容适合常驻。另一些内容只在特定任务里有用，比如 Spring Boot 分层怎么 review、Rust 错误处理有哪些惯例、ADR 应该怎么写。这些内容放进启动上下文就是浪费，放进 Skill 才更合适。&lt;/p&gt;
+&lt;p&gt;如果再往外看，Command、Agent、Hook、Plugin 也不是装饰品。它们分别解决入口、角色、自动化和分发问题。把这些层级区分开，规则系统才不会越写越重。&lt;/p&gt;
+&lt;h2 id="核心模型按加载时机和职责分层"&gt;&lt;a href="#%e6%a0%b8%e5%bf%83%e6%a8%a1%e5%9e%8b%e6%8c%89%e5%8a%a0%e8%bd%bd%e6%97%b6%e6%9c%ba%e5%92%8c%e8%81%8c%e8%b4%a3%e5%88%86%e5%b1%82" class="header-anchor"&gt;&lt;/a&gt;核心模型：按加载时机和职责分层
+&lt;/h2&gt;&lt;p&gt;我现在会把 AI Coding Agent 的配置分成六层：&lt;/p&gt;
+&lt;p&gt;&lt;img alt="AI Coding Agent 配置分层架构：启动上下文、Skills、Commands、Agents、Hooks、Plugins 各自承担不同职责" class="gallery-image" data-flex-basis="373px" data-flex-grow="155" height="913" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/2-excalidraw.png" srcset="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/2-excalidraw_hu_8d65d94975019e8b.png 800w, https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/2-excalidraw.png 1420w" width="1420"&gt;&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;层级&lt;/th&gt;
+					&lt;th&gt;典型载体&lt;/th&gt;
+					&lt;th&gt;加载方式&lt;/th&gt;
+					&lt;th&gt;适合放什么&lt;/th&gt;
+					&lt;th&gt;不适合放什么&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;启动上下文&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;CLAUDE.md&lt;/code&gt;、&lt;code&gt;AGENTS.md&lt;/code&gt;、Rules&lt;/td&gt;
+					&lt;td&gt;默认读取&lt;/td&gt;
+					&lt;td&gt;红线、项目不变量、极短约束&lt;/td&gt;
+					&lt;td&gt;大量示例、长篇教程&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;按需能力&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;skills/*/SKILL.md&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;触发后读取&lt;/td&gt;
+					&lt;td&gt;工作流、示例、检查清单、模板&lt;/td&gt;
+					&lt;td&gt;全局底线&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;固定入口&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;commands/*.md&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;用户显式调用&lt;/td&gt;
+					&lt;td&gt;高频任务入口、参数化提示&lt;/td&gt;
+					&lt;td&gt;完整知识库&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;角色隔离&lt;/td&gt;
+					&lt;td&gt;&lt;code&gt;agents/*.md&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;委派时加载&lt;/td&gt;
+					&lt;td&gt;reviewer、architect、debugger 等专门角色&lt;/td&gt;
+					&lt;td&gt;通用项目规则全集&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;确定性护栏&lt;/td&gt;
+					&lt;td&gt;Hooks、scripts&lt;/td&gt;
+					&lt;td&gt;事件触发&lt;/td&gt;
+					&lt;td&gt;格式化、检查、阻断危险操作&lt;/td&gt;
+					&lt;td&gt;需要语义判断的建议&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;分发层&lt;/td&gt;
+					&lt;td&gt;Plugin、配置仓库&lt;/td&gt;
+					&lt;td&gt;安装时生效&lt;/td&gt;
+					&lt;td&gt;一组 rules、skills、agents、commands、hooks&lt;/td&gt;
+					&lt;td&gt;单篇长规则&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;如果一条规则每次任务都必须生效，而且违反后代价很高，它可以进入启动上下文。如果一段说明只有做某类任务时才有用，它应该进入 Skill。如果一个约束可以被脚本稳定检查，就不要只靠自然语言提醒 Agent。能自动化的交给 Hook，不能自动化的再交给 Rule 或 Skill。&lt;/p&gt;
+&lt;h2 id="rule常驻所以必须短"&gt;&lt;a href="#rule%e5%b8%b8%e9%a9%bb%e6%89%80%e4%bb%a5%e5%bf%85%e9%a1%bb%e7%9f%ad" class="header-anchor"&gt;&lt;/a&gt;Rule：常驻，所以必须短
+&lt;/h2&gt;&lt;p&gt;Rule 的价值在于常驻。正因为它常驻，所以它必须短。&lt;/p&gt;
+&lt;p&gt;适合进入 Rule 的内容通常有三个特点：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;跨任务稳定成立&lt;/li&gt;
+&lt;li&gt;违反后代价很高&lt;/li&gt;
+&lt;li&gt;Agent 默认就必须知道&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;比如：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-md" data-lang="md"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;-&lt;/span&gt; 不要覆盖用户未请求修改的文件。
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;-&lt;/span&gt; 修改数据库 schema 必须配套 migration。
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;-&lt;/span&gt; 测试失败时不能声称任务完成。
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="k"&gt;-&lt;/span&gt; 不要绕过认证、授权和输入校验。
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这些规则不依赖具体语言，也不需要展开成长篇教程。Agent 每次工作都应该知道它们。&lt;/p&gt;
+&lt;p&gt;不适合放进 Rule 的内容也很典型：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Spring Boot Controller 应该怎么分层&lt;/li&gt;
+&lt;li&gt;Rust 错误处理有哪些正反例&lt;/li&gt;
+&lt;li&gt;React 性能优化检查清单&lt;/li&gt;
+&lt;li&gt;某次项目复盘总结出的完整经验&lt;/li&gt;
+&lt;li&gt;一整套 code review 工作流&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;这些内容不是不重要，而是不应该常驻。它们需要在对应任务里出现，而不是每次都挤占上下文。&lt;/p&gt;
+&lt;p&gt;一句话理解 Rule：通用、稳定、短、硬。&lt;/p&gt;
+&lt;h2 id="skill按需加载的任务能力包"&gt;&lt;a href="#skill%e6%8c%89%e9%9c%80%e5%8a%a0%e8%bd%bd%e7%9a%84%e4%bb%bb%e5%8a%a1%e8%83%bd%e5%8a%9b%e5%8c%85" class="header-anchor"&gt;&lt;/a&gt;Skill：按需加载的任务能力包
+&lt;/h2&gt;&lt;p&gt;Skill 不是 Rule 的加长版。更准确地说，Skill 是按需加载的任务能力包。&lt;/p&gt;
+&lt;p&gt;一个 Skill 可以包含完整步骤、判断标准、代码示例、正反例、脚本和模板。它可以比 Rule 详细得多，因为它只有在相关任务中才进入上下文。&lt;/p&gt;
+&lt;p&gt;比如一个 &lt;code&gt;spring-boot-review&lt;/code&gt; Skill 可以这样组织：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;skills/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;└── spring-boot-review/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ├── SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ├── references/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │ ├── controller-patterns.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; │ └── transaction-boundaries.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; └── scripts/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; └── check-layering.ps1
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;SKILL.md&lt;/code&gt; 负责告诉 Agent 什么时候使用这个 Skill，以及 review 的基本流程。更长的模式说明放到 &lt;code&gt;references/&lt;/code&gt;，能稳定运行的检查放到 &lt;code&gt;scripts/&lt;/code&gt;。这样 Agent 一开始只需要看到 Skill 的名称和描述，真正触发时再逐层读取。&lt;/p&gt;
+&lt;p&gt;好的 Skill 至少要回答四个问题：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;什么时候该触发？&lt;/li&gt;
+&lt;li&gt;执行步骤是什么？&lt;/li&gt;
+&lt;li&gt;怎么判断结果是对的？&lt;/li&gt;
+&lt;li&gt;有没有可以复用的脚本、模板或参考资料？&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;如果一个 Skill 只有一段泛泛而谈的原则，它可能应该回到 Rule。如果一个 Rule 已经长到需要示例、反例和步骤，它大概率应该拆成 Skill。&lt;/p&gt;
+&lt;h2 id="commandagenthook-的边界"&gt;&lt;a href="#commandagenthook-%e7%9a%84%e8%be%b9%e7%95%8c" class="header-anchor"&gt;&lt;/a&gt;Command、Agent、Hook 的边界
+&lt;/h2&gt;&lt;p&gt;除了 Rule 和 Skill，AI Coding Agent 的配置里还有几类很容易混在一起的东西。&lt;/p&gt;
+&lt;p&gt;Command 负责固定入口。比如 &lt;code&gt;/review&lt;/code&gt;、&lt;code&gt;/test&lt;/code&gt;、&lt;code&gt;/explain&lt;/code&gt;，它们适合启动一个高频任务。Command 不应该变成知识库，它最好只是告诉 Agent 这次要做什么、参数是什么、要调用哪些 Skill 或遵守哪些输出格式。&lt;/p&gt;
+&lt;p&gt;Agent 负责角色隔离。比如 reviewer、architect、security-auditor、debugger。它解决的是 &amp;ldquo;谁来做&amp;rdquo; 的问题，而不是 &amp;ldquo;规则写在哪里&amp;rdquo; 的问题。需要独立上下文、专门判断标准，或者并行处理时，Agent 比把所有说明塞进 Rule 更合适。&lt;/p&gt;
+&lt;p&gt;Hook 负责确定性自动化。如果一条约束可以被机器稳定检查，就不该只写成自然语言提醒。比如格式化、敏感文件检查、禁止危险命令、提交前运行最小测试，这些都更适合 Hook 或脚本。&lt;/p&gt;
+&lt;p&gt;可以用这个表快速判断：&lt;/p&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;需求&lt;/th&gt;
+					&lt;th&gt;放在哪里&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;每次任务都必须知道&lt;/td&gt;
+					&lt;td&gt;Rule、&lt;code&gt;CLAUDE.md&lt;/code&gt;、&lt;code&gt;AGENTS.md&lt;/code&gt;&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;只有做某类任务才需要&lt;/td&gt;
+					&lt;td&gt;Skill&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;想用一个命令启动&lt;/td&gt;
+					&lt;td&gt;Command&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;需要专门角色判断&lt;/td&gt;
+					&lt;td&gt;Agent&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;机器能稳定检查&lt;/td&gt;
+					&lt;td&gt;Hook、script&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;想跨项目分发整套能力&lt;/td&gt;
+					&lt;td&gt;Plugin、配置仓库&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;这个判断表比抽象定义更实用。很多规则系统变乱，就是因为一开始没有给这些内容划边界。&lt;/p&gt;
+&lt;h2 id="一个拆分例子"&gt;&lt;a href="#%e4%b8%80%e4%b8%aa%e6%8b%86%e5%88%86%e4%be%8b%e5%ad%90" class="header-anchor"&gt;&lt;/a&gt;一个拆分例子
+&lt;/h2&gt;&lt;p&gt;假设原来有一条很长的 Rule：&lt;/p&gt;
+&lt;p&gt;&lt;img alt="把一个超长规则文件拆成 Rule、Skill、Command 和 Hook 后，常驻上下文更轻，职责边界更清楚" class="gallery-image" data-flex-basis="426px" data-flex-grow="177" height="941" loading="lazy" sizes="(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) 700px, (max-width: 1279px) 950px, 1232px" src="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/3.png" srcset="https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/3_hu_f87cd56386367f5c.png 800w, https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/3_hu_8c4905ada30daebe.png 1600w, https://Orangex-position0.github.io/posts/ai-coding/ai-coding-agent-rule-management/3.png 1672w" width="1672"&gt;&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-md" data-lang="md"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;写 Spring Boot API 时，Controller 不要包含业务逻辑，Service 负责事务，Repository 只负责数据访问。Controller 要校验参数，错误返回统一格式。下面是 10 个正反例……
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这条规则的问题不是内容错，而是承载位置错。它同时包含原则、实战细节和示例，放进常驻 Rule 会越来越长。&lt;/p&gt;
+&lt;p&gt;更合适的拆法是：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;rules/architecture.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;- Controller 不承载业务逻辑，事务边界放在应用服务层。
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;skills/spring-boot/SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;- 说明 Controller / Service / Repository 的具体写法
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;- 给出正反例
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;- 给出 review checklist
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;commands/spring-review.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;- 启动 Spring Boot review 流程
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这样常驻上下文只保留最短原则，具体怎么做交给 Skill，高频入口交给 Command。&lt;/p&gt;
+&lt;p&gt;再看一个 Hook 的例子：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-md" data-lang="md"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;提交前必须格式化代码。
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这句话可以留在 Rule 里，但只靠 Rule 不够。格式化是机器能稳定检查的事，更好的做法是：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Rule: 非生成文件不要提交未格式化代码。
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;Hook/script: 自动运行 formatter，失败则阻断。
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;自然语言适合表达判断，脚本适合处理确定性检查。两者不要互相替代。&lt;/p&gt;
+&lt;h2 id="推荐目录结构"&gt;&lt;a href="#%e6%8e%a8%e8%8d%90%e7%9b%ae%e5%bd%95%e7%bb%93%e6%9e%84" class="header-anchor"&gt;&lt;/a&gt;推荐目录结构
+&lt;/h2&gt;&lt;p&gt;如果是个人 AI coding 配置仓库，可以先用一个简单结构：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;ai-config/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;├── rules/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── principles.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── simplicity.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── error-handling.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── security.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── testing.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;├── skills/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── rust-development/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ │ └── SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── spring-boot/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ │ └── SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── api-design/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ │ └── SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── database-design/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── SKILL.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;├── agents/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── reviewer.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── architect.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;├── commands/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ ├── review.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;│ └── explain.md
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;└── scripts/
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; ├── install.ps1
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; └── check.ps1
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这里不要一开始就设计得太复杂。先保证每层职责清楚：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;rules/&lt;/code&gt; 写短规则和红线&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;skills/&lt;/code&gt; 写任务流程和实战细节&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;agents/&lt;/code&gt; 写专门角色&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;commands/&lt;/code&gt; 写高频入口&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;scripts/&lt;/code&gt; 写可重复检查和安装逻辑&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;等到这些内容需要跨项目安装、版本化、权限配置和工具连接时，再考虑把它们打包成 Plugin。没有稳定复用前，不需要为了看起来完整而提前做分发层。&lt;/p&gt;
+&lt;h2 id="我的取舍原则"&gt;&lt;a href="#%e6%88%91%e7%9a%84%e5%8f%96%e8%88%8d%e5%8e%9f%e5%88%99" class="header-anchor"&gt;&lt;/a&gt;我的取舍原则
+&lt;/h2&gt;&lt;p&gt;整理 Rule 和 Skill 时，我会按下面几个问题判断：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;这条内容是不是每次任务都必须知道？如果不是，先不要放进 Rule。&lt;/li&gt;
+&lt;li&gt;它是不是只有某类任务才用得到？如果是，放进 Skill。&lt;/li&gt;
+&lt;li&gt;它是不是一个固定入口？如果是，放进 Command。&lt;/li&gt;
+&lt;li&gt;它是不是需要一个专门角色来判断？如果是，放进 Agent。&lt;/li&gt;
+&lt;li&gt;它能不能被脚本稳定检查？如果能，优先写成 Hook 或 script。&lt;/li&gt;
+&lt;li&gt;它是不是已经在多个项目里稳定复用？如果是，再考虑 Plugin 或安装脚本。&lt;/li&gt;
+&lt;li&gt;这个顺序能避免一个常见问题：把所有东西都写成 Rule。Rule 看起来最简单，长期维护成本反而最高。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;同时也推荐将这些内容直接整理为一个 &lt;code&gt;rule-creator&lt;/code&gt; 或 &lt;code&gt;skill-creator&lt;/code&gt; Skill，让 AI 自己根据需求生成对应文档。&lt;/p&gt;
+&lt;h2 id="常见误区"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e8%af%af%e5%8c%ba" class="header-anchor"&gt;&lt;/a&gt;常见误区
+&lt;/h2&gt;&lt;p&gt;&lt;strong&gt;把 Rule 写成知识库&lt;/strong&gt;，会让默认上下文越来越重。Rule 应该像红线，不应该像教程。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;把 Skill 写成万能手册&lt;/strong&gt;，会让触发范围变得模糊。一个 Skill 最好对应一类明确任务。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;把 Command 写成教程&lt;/strong&gt;，入口会变得很重。Command 只负责启动流程，不负责承载所有知识。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;把 Agent 写成另一个总规则文件&lt;/strong&gt;，角色边界会模糊。Agent 应该有明确职责和输出标准。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;把 Hook 写成复杂业务判断&lt;/strong&gt;，脚本适合确定性检查，不适合替代语义判断。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;复制网上 Rule 不消化&lt;/strong&gt;，会把别人的项目约束带进自己的项目。Rule 不是越多越稳，只有和当前工作流匹配才有价值。&lt;/p&gt;
+&lt;h2 id="总结"&gt;&lt;a href="#%e6%80%bb%e7%bb%93" class="header-anchor"&gt;&lt;/a&gt;总结
+&lt;/h2&gt;&lt;p&gt;Rule 和 Skill 写得好，确实能提高 Agent 的稳定性。但更关键的是，不同类型的约束要放在不同层。&lt;/p&gt;
+&lt;p&gt;Rule 是常驻底线，要短。Skill 是按需加载的实战手册，可以详细。Command 是入口，Agent 是角色，Hook 是自动化护栏，Plugin 是分发方式。&lt;/p&gt;
+&lt;p&gt;把这些边界分清楚以后，AI coding 配置才会越用越清楚，而不是越积越重。&lt;/p&gt;
+&lt;h2 id="参考资料"&gt;&lt;a href="#%e5%8f%82%e8%80%83%e8%b5%84%e6%96%99" class="header-anchor"&gt;&lt;/a&gt;参考资料
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/memory" target="_blank" rel="noopener"
+ &gt;Anthropic: Manage Claude&amp;rsquo;s memory&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/skills" target="_blank" rel="noopener"
+ &gt;Anthropic: Skills&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/slash-commands" target="_blank" rel="noopener"
+ &gt;Anthropic: Slash commands&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/sub-agents" target="_blank" rel="noopener"
+ &gt;Anthropic: Subagents&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/hooks" target="_blank" rel="noopener"
+ &gt;Anthropic: Hooks&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://docs.anthropic.com/en/docs/claude-code/plugins" target="_blank" rel="noopener"
+ &gt;Anthropic: Plugins&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://github.com/affaan-m/everything-claude-code" target="_blank" rel="noopener"
+ &gt;GitHub: everything-claude-code&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</description></item></channel></rss>
