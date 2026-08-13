@@ -1,11 +1,18 @@
 +++
 title = 'Rust Typestate Pattern：用类型系统约束状态流转'
 date = 2026-08-04T00:00:00+08:00
+lastmod = 2026-08-13T18:55:23+08:00
 draft = false
 description = '用 Rust 类型系统表达对象状态，把错误的调用顺序提前到编译期发现。'
+image = 'cover.png'
 categories = ['rust']
 tags = ['rust', 'type-system', 'design-pattern']
 +++
+
+## 更新记录
+
+- 2026-08-13：练习由 Database Connection 替换为自动售货机（Idle → CoinInserted → Dispensing，含 `timeout()` 显式转移），与「Typestate 的边界」一节的正面例子呼应。
+- 2026-08-12：新增「Typestate 的边界：它保证调用顺序，不保证现实」一节，区分非法调用顺序与运行时失败，补充售货机等外部失效可建模成显式转移的正面例子。
 
 ## 背景：运行时状态检查的问题
 
@@ -387,39 +394,45 @@ Typestate 很有用，但也很容易被滥用成类型体操。
 
 如果它能让调用者更难写错，值得考虑。如果只是让实现者写出更多泛型，先停一下。
 
-## 练习：实现一个状态安全的 Database Connection
+## 练习：实现一个状态安全的自动售货机
 
-实现一个简化版数据库连接，要求：
+实现一个简化版自动售货机，要求（练习只关注调用顺序约束，所以方法都返回具体状态类型；真实场景里 `select()` 会因商品售罄、`dispense()` 会因找零失败返回 `Result`，见下一节）：
 
-- `Db::new(url)` 创建 `Db<Disconnected>`。
-- 只有 `Db<Disconnected>` 能调用 `connect()`。
-- 只有 `Db<Connected>` 能调用 `query(sql)`。
-- 只有 `Db<Connected>` 能调用 `begin_transaction()`。
-- 只有 `Db<InTransaction>` 能调用 `commit()`。
-- 不需要真的连接数据库，用 `String` 或 `println!` 模拟即可。
+- `VendingMachine::new()` 创建 `VendingMachine<Idle>`。
+- 只有 `VendingMachine<Idle>` 能调用 `insert_coin(amount)`。
+- 只有 `VendingMachine<CoinInserted>` 能调用 `select(item)` 或 `timeout()`。
+- 只有 `VendingMachine<Dispensing>` 能调用 `dispense()`。
+- `dispense()` 返回 `VendingMachine<Idle>`，等待下一次交易。
+- 用 `println!` 模拟出货即可，不需要真实的库存或找零逻辑。
 
 目标调用方式：
 
 ```rust
 fn main() {
-    let db = Db::<Disconnected>::new("postgres://localhost/app").connect();
+    // 正常流程：投币 → 选择 → 出货
+    VendingMachine::<Idle>::new()
+        .insert_coin(5)
+        .select("coke")
+        .dispense();
 
-    db.query("select * from users");
-
-    let db = db.begin_transaction().commit();
-
-    db.query("select * from orders");
+    // 超时是显式转移：不选择则退款回到 Idle，可以重新开始
+    VendingMachine::<Idle>::new()
+        .insert_coin(5)
+        .timeout()
+        .insert_coin(3)
+        .select("water")
+        .dispense();
 }
 ```
 
 下面这些调用应该无法通过编译：
 
 ```rust
-let db = Db::<Disconnected>::new("postgres://localhost/app");
-db.query("select * from users");
+// 没投币就选商品：select() 只存在于 CoinInserted
+VendingMachine::<Idle>::new().select("coke");
 
-let db = Db::<Disconnected>::new("postgres://localhost/app").connect();
-db.commit();
+// 没选商品就出货：dispense() 只存在于 Dispensing
+VendingMachine::<Idle>::new().insert_coin(5).dispense();
 ```
 
 <details>
@@ -428,71 +441,103 @@ db.commit();
 ```rust
 use std::marker::PhantomData;
 
-struct Disconnected;
-struct Connected;
-struct InTransaction;
+struct Idle;
+struct CoinInserted;
+struct Dispensing;
 
-struct Db<State> {
-    url: String,
+struct VendingMachine<State> {
+    balance: u32,
     _state: PhantomData<State>,
 }
 
-impl Db<Disconnected> {
-    fn new(url: impl Into<String>) -> Self {
+impl VendingMachine<Idle> {
+    fn new() -> Self {
         Self {
-            url: url.into(),
+            balance: 0,
             _state: PhantomData,
         }
     }
 
-    fn connect(self) -> Db<Connected> {
-        println!("connect to {}", self.url);
+    fn insert_coin(self, amount: u32) -> VendingMachine<CoinInserted> {
+        println!("inserted {amount} cents");
 
-        Db {
-            url: self.url,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl Db<Connected> {
-    fn query(&self, sql: &str) {
-        println!("query on {}: {}", self.url, sql);
-    }
-
-    fn begin_transaction(self) -> Db<InTransaction> {
-        println!("begin transaction");
-
-        Db {
-            url: self.url,
+        VendingMachine {
+            balance: self.balance + amount,
             _state: PhantomData,
         }
     }
 }
 
-impl Db<InTransaction> {
-    fn commit(self) -> Db<Connected> {
-        println!("commit transaction");
+impl VendingMachine<CoinInserted> {
+    fn select(self, item: &str) -> VendingMachine<Dispensing> {
+        println!("selected {item}");
 
-        Db {
-            url: self.url,
+        VendingMachine {
+            balance: self.balance,
+            _state: PhantomData,
+        }
+    }
+
+    fn timeout(self) -> VendingMachine<Idle> {
+        println!("timeout, refund {} cents", self.balance);
+
+        VendingMachine {
+            balance: 0,
+            _state: PhantomData,
+        }
+    }
+}
+
+impl VendingMachine<Dispensing> {
+    fn dispense(self) -> VendingMachine<Idle> {
+        println!("dispensing, change {} cents", self.balance);
+
+        VendingMachine {
+            balance: 0,
             _state: PhantomData,
         }
     }
 }
 
 fn main() {
-    let db = Db::<Disconnected>::new("postgres://localhost/app").connect();
+    VendingMachine::<Idle>::new()
+        .insert_coin(5)
+        .select("coke")
+        .dispense();
 
-    db.query("select * from users");
-
-    let db = db.begin_transaction().commit();
-
-    db.query("select * from orders");
+    VendingMachine::<Idle>::new()
+        .insert_coin(5)
+        .timeout()
+        .insert_coin(3)
+        .select("water")
+        .dispense();
 }
 ```
 
 </details>
+
+## Typestate 的边界：它保证调用顺序，不保证现实
+
+文章前几节用 API Client 登录、数据库连接当例子，这里澄清一个容易误解的边界：**Typestate 保证的是"调用顺序"，不是"外部现实"**。
+
+类型里的状态是"程序声称的状态"，不是"外部世界的真相"。`ApiClient<Authenticated>` 只说明我们调用过 `login()`，不代表服务器此刻仍然认可这个 token；`Db<Connected>` 只说明我们调用过 `connect()`，不代表连接现在还活着。token 会过期、连接会断开——这类由外部环境造成的状态失效，类型系统既看不到也拦不住。
+
+所以"用了 Typestate 就不用处理错误"是误解。它消灭的是一种特定错误：**非法调用顺序**（没登录就调用需要认证的接口、没连接就查询、没开事务就 commit）。另一类错误——**运行时失败**（I/O 断开、凭据过期）——本来就不在它的职责范围，仍然需要在方法里用 `Result` 兜底：
+
+| 错误类型     | 例子                              | Typestate 的作用      |
+| ------------ | --------------------------------- | --------------------- |
+| 非法调用顺序 | 没连接就 query、没开事务就 commit | ✅ 编译期拦下         |
+| 运行时失败   | 连接断开、token 过期              | ❌ 仍需 `Result` 处理 |
+
+两者是正交的：类型约束调用顺序，`Result` 处理运行时失败。真实生态也是这么共存的，比如 `rusqlite` 的 `Transaction` 守卫、rustls 的 `ConfigBuilder`。
+
+那怎么判断一个场景适不适合 Typestate？关键不是"状态会不会被外部改变"（几乎所有状态都可能被外部影响），而是：
+
+> **外部失效能否被建模成有限、确定的显式转移？**
+
+能，就是好例子。比如售货机：时间流逝会让"选择商品"超时回到"空闲"，它只有一个外部事件，能干净地建模成一条转移边——所有状态变化都在类型里可见，Typestate 是诚实的。不能，类型就会"撒谎"。比如数据库连接断开：失效面巨大且不确定，没法穷举成几条转移边，Typestate 视图反而会掩盖真正的主错误路径——这种场景该在边界用 `Result` 兜底。
+
+最后，状态的命名也决定了它诚不诚实。`Connected` 应该理解为"我们调用过 `connect()`"，而不是"服务器确认可达"。前者是程序事实，类型能保证；后者是外部事实，保证不了。写 Typestate 时，让状态名落在程序事实这一侧，类型才不会撒谎。
 
 ## 总结
 
