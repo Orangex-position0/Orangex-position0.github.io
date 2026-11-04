@@ -10,7 +10,7 @@ series = ''
 seriesWeight = 0
 +++
 
-![封面：Ferris 守门人](images/cover.png)
+![封面：Ferris 守卫 Rust 内存安全的金库](images/cover.webp)
 
 ## 凌晨三点的 segfault
 

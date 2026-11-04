@@ -1,0 +1,47 @@
+{{- $image := partial "helper/image" (dict "Image" .Params.image "Resources" .Resources "Context" .) -}}
+<article class="{{ if $image }}has-image{{ end }}">
+    <a href="{{ .RelPermalink }}">
+        <div class="article-details">
+            <h2 class="article-title">{{ .Title }}</h2>
+
+            {{- if and (eq .Section "posts") (eq .Kind "page") .Description -}}
+                <p class="post-list-description">{{ .Description | plainify }}</p>
+            {{- end -}}
+
+            {{- $description := .Params.description -}}
+            {{- $IsTerm := in .Kind "term" -}}
+            {{- if $IsTerm -}}
+                {{- $description = $description | default (T "list.page" (len .Pages)) -}}
+            {{- end -}}
+            {{- if or $description (not .Date.IsZero) -}}
+                <footer class="article-meta">
+                    {{- if or $IsTerm .Date.IsZero -}}
+                        <span class="article-description">{{ $description }}</span>
+                    {{- else -}}
+                        <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">
+                            {{ .Date | time.Format .Site.Params.dateFormat.published }}
+                        </time>
+                    {{- end -}}
+                </footer>
+            {{- end -}}
+        </div>
+
+        {{ if $image }}
+        <div class="article-image">
+            {{ partial "helper/thumbnail-image" (dict
+                "Resource" $image.Resource
+                "Width" 60
+                "Height" 60
+                "Resize" .Site.Params.ImageProcessing.Thumbnail.Enabled
+                "Attributes" (dict
+                    "src" $image.Permalink
+                    "alt" ""
+                    "loading" "lazy"
+                    "width" $image.Width
+                    "height" $image.Height
+                )
+            ) }}
+        </div>
+        {{ end }}
+    </a>
+</article>

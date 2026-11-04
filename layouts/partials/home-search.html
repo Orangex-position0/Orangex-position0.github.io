@@ -1,0 +1,9 @@
+{{- with .Page.Site.GetPage "/search" -}}
+<form class="home-search {{ $.Class }}" action="{{ .RelPermalink }}" role="search">
+    <label for="{{ $.ID }}">搜索文章</label>
+    <div class="home-search__fields">
+        <input id="{{ $.ID }}" type="search" name="keyword" placeholder="输入关键词" required>
+        <button type="submit">搜索</button>
+    </div>
+</form>
+{{- end -}}

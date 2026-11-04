@@ -3,7 +3,7 @@ title = 'Rust 心智模型：从 GC 语言转来后，写代码时应该怎样�
 date = 2026-09-29T21:00:06+08:00
 draft = false
 description = '面向 GC 语言开发者，通过所有权、借用、共享、并发与 RAII 六个问题，建立编写 Rust 代码时的数据关系思维。'
-image = 'cover.png'
+image = 'cover.webp'
 
 categories = ['rust']
 tags = ['rust', 'ownership', 'borrowing', 'memory-management', 'concurrency']

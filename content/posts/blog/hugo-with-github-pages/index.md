@@ -40,7 +40,7 @@ Hugo 是一个基于 Go 语言的静态网站生成器，具有构建速度快�
 
 **仓库必须设置为 Public**，否则 GitHub Pages 无法正常访问。
 
-![alt text](Hugo-with-Github-Pages-1.png)
+![GitHub 新建仓库页面：填写仓库名称并选择 Public 可见性](Hugo-with-Github-Pages-1.png)
 
 ## 二、配置 Hugo 项目
 
@@ -181,7 +181,7 @@ jobs:
 
 1. 进入 GitHub 仓库的 **Settings** 页面
 
-![alt text](Hugo-with-Github-Pages-2.png)
+![GitHub 仓库首页：从导航栏进入 Settings](Hugo-with-Github-Pages-2.png)
 
 2. 在左侧菜单找到 **Pages**
 3. 配置如下选项：
@@ -189,7 +189,7 @@ jobs:
    - **Branch**: 选择 `gh-pages` 分支
 >⚠️注意，若没有 gh-pages 分支，可能是 Github Actions 执行失败，导致没创建分支
 
-![alt text](Hugo-with-Github-Pages-3.png)
+![GitHub Pages 设置页面：选择从 gh-pages 分支根目录部署](Hugo-with-Github-Pages-3.png)
 
 > 配置完成后，GitHub 会自动开始部署，几分钟后即可通过 `https://<username>.github.io/` 访问你的博客。
 

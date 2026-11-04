@@ -1,0 +1,40 @@
+{{ define "body-class" }}home-page{{ end }}
+
+{{ define "main" }}
+    <section class="home-intro" aria-labelledby="home-title">
+        <p class="home-eyebrow">Orangex-position0 · 技术博客</p>
+        <h1 id="home-title">记录学习，分享知识</h1>
+        <p>后端开发与工程实践的学习笔记，写给想把问题弄明白的人。</p>
+    </section>
+
+    {{ partial "home-search" (dict "Page" . "Class" "home-search--mobile" "ID" "home-search-mobile") }}
+
+    <nav class="home-topics" aria-labelledby="home-topics-title">
+        <h2 id="home-topics-title">从主题开始</h2>
+        <div class="home-topic-links">
+            {{ with .Site.GetPage "/categories/rust" }}<a href="{{ .RelPermalink }}">Rust</a>{{ end }}
+            {{ with .Site.GetPage "/categories/java" }}<a href="{{ .RelPermalink }}">Java</a>{{ end }}
+            {{ with .Site.GetPage "/categories/ai-coding" }}<a href="{{ .RelPermalink }}">AI Coding</a>{{ end }}
+        </div>
+    </nav>
+
+    <section class="home-recent" aria-labelledby="home-recent-title">
+        <header class="home-section-heading">
+            <h2 id="home-recent-title">最新文章</h2>
+            {{ with .Site.GetPage "/posts" }}<a href="{{ .RelPermalink }}">全部文章 →</a>{{ end }}
+        </header>
+        <div class="article-list--compact">
+            {{ range first 5 (partial "helper/pages.html" .) }}
+                {{ partial "home-article" . }}
+            {{ end }}
+        </div>
+    </section>
+
+    {{ partial "footer/footer" . }}
+{{ end }}
+
+{{ define "right-sidebar" }}
+    <aside class="sidebar right-sidebar sticky">
+        {{ partial "home-search" (dict "Page" . "Class" "home-search--desktop" "ID" "home-search-desktop") }}
+    </aside>
+{{ end }}

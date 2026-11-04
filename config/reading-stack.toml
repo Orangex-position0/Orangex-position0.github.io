@@ -1,0 +1,3 @@
+# 对照预览旧版：hugo server --config hugo.toml,config/reading-stack.toml
+[params]
+  articleReadingStyle = 'stack'

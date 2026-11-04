@@ -1,0 +1,36 @@
+{{- $image := partial "helper/image" (dict "Image" .Params.image "Resources" .Resources "Context" .) -}}
+<article class="{{ if $image }}has-image{{ end }}">
+    <a href="{{ .RelPermalink }}">
+        <div class="article-details">
+            <h2 class="article-title">{{ .Title }}</h2>
+            {{- with .Description -}}
+                <p class="post-list-description">{{ . | plainify }}</p>
+            {{- end -}}
+            {{- if not .Date.IsZero -}}
+                <footer class="article-meta">
+                    <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">
+                        {{ .Date | time.Format .Site.Params.dateFormat.published }}
+                    </time>
+                </footer>
+            {{- end -}}
+        </div>
+
+        {{- with $image -}}
+        <div class="article-image">
+            {{ partial "helper/thumbnail-image" (dict
+                "Resource" .Resource
+                "Width" 132
+                "Height" 99
+                "Resize" $.Site.Params.ImageProcessing.Thumbnail.Enabled
+                "Attributes" (dict
+                    "src" .Permalink
+                    "alt" ""
+                    "loading" "lazy"
+                    "width" .Width
+                    "height" .Height
+                )
+            ) }}
+        </div>
+        {{- end -}}
+    </a>
+</article>

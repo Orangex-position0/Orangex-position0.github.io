@@ -92,6 +92,8 @@ defaultContentLanguage = 'zh-cn'
 [params]
   description = '一个后端程序员的分享欲发泄场所'
   mainSections = ['posts']
+  # 文章阅读风格：kami（默认）/ stack（保留的对照版）
+  articleReadingStyle = 'kami'
   rssFullContent = true
 
   # 颜色方案

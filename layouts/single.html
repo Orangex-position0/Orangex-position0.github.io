@@ -1,5 +1,6 @@
 {{ define "body-class" }}
     article-page
+    {{- if and (eq .Site.Params.articleReadingStyle "kami") (eq .Section "posts") }} reading-kami{{ end -}}
     {{/*
         Enable the right sidebar if
             - Widget different from 'TOC' is enabled

@@ -6,3 +6,498 @@
         object-fit: cover;
     }
 }
+
+// 阅读模式 A：保留 Stack 色彩和字体，只整理文章页的阅读节奏。
+.article-page {
+    .main-article {
+        @media (min-width: 1024px) {
+            max-width: 820px;
+            width: 100%;
+            margin-inline: auto;
+        }
+
+        .article-content {
+            --article-line-height: 1.75;
+
+            > p {
+                margin-block: 1.2em;
+            }
+
+            h2, h3, h4 {
+                line-height: 1.4;
+                margin-block: 1.7em 0.65em;
+            }
+
+            .highlight, pre, .table-wrapper {
+                overflow-x: auto;
+            }
+
+            pre, pre code {
+                word-break: normal;
+                overflow-wrap: normal;
+                white-space: pre;
+            }
+
+            img {
+                max-width: 100%;
+                height: auto;
+            }
+        }
+    }
+}
+
+// 阅读模式 B：为文章主栏铺一层暖纸画布，正文保留更亮的纸面。
+// 不在 body 上覆写主题变量，首页、列表和两侧导航仍保持 Stack 风格。
+.article-page.reading-kami main.main {
+    background: #f5f4ed;
+    border-radius: 4px;
+    padding-bottom: 24px;
+
+    @media (min-width: 768px) {
+        padding: 18px;
+    }
+}
+
+.article-page.reading-kami .main-article {
+    --card-background: #faf9f5;
+    --card-text-color-main: #141413;
+    --card-text-color-secondary: #504e49;
+    --card-text-color-tertiary: #6b6a64;
+    --accent-color: #1b365d;
+    --accent-color-darker: #142a49;
+    --blockquote-background-color: #e8e6dc;
+    --code-background-color: #e8e6dc;
+    --code-text-color: #263d56;
+    --pre-background-color: #e8e6dc;
+    --pre-text-color: #141413;
+    --table-border-color: #c9c6bb;
+    --tr-even-background-color: #efede4;
+    --article-font-family: Charter, Georgia, "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+
+    background: var(--card-background);
+    border-radius: 2px;
+    box-shadow: none;
+
+    .article-title, .article-subtitle {
+        font-family: var(--article-font-family);
+    }
+
+    .article-header {
+        .article-title {
+            font-size: clamp(2.6rem, 2.4vw, 3rem);
+            font-weight: 500;
+            line-height: 1.3;
+            text-wrap: balance;
+        }
+
+        .article-subtitle {
+            line-height: 1.6;
+        }
+
+        // 分类颜色由 Stack 写成内联样式，这里仅在 B 版统一为单色标签。
+        .article-category a {
+            background-color: #e4ecf5 !important;
+            color: #1b365d !important;
+        }
+    }
+
+    .article-content {
+        --article-line-height: 1.7;
+
+        h1, h2, h3, h4, h5, h6 {
+            border-inline-start: 0;
+            margin-inline-start: 0;
+            padding-inline-start: 0;
+            font-weight: 500;
+
+            a.header-anchor {
+                left: auto;
+                right: 100%;
+                width: 1.5em;
+
+                &:focus-visible {
+                    opacity: 1;
+                    outline: 2px solid currentColor;
+                }
+            }
+        }
+
+        h2 {
+            color: var(--accent-color);
+            margin-block: 2.1em 0.7em;
+        }
+
+        h3 {
+            color: var(--card-text-color-main);
+            margin-block: 1.7em 0.6em;
+        }
+
+        figure figcaption {
+            font-family: var(--base-font-family);
+        }
+
+        blockquote:not(.alert) {
+            border-inline-start: 0;
+        }
+
+        .highlight, pre {
+            border-radius: 4px;
+        }
+    }
+}
+
+:root[data-scheme="dark"] .article-page.reading-kami main.main {
+    background: #242421;
+}
+
+// 文章列表以标题和摘要为主，封面缩为辅助；按年份分组仍可直接扫描。
+.post-year-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--section-separation);
+
+    .post-year-heading {
+        color: var(--body-text-color);
+        font-size: 1.8rem;
+        font-variant-numeric: tabular-nums;
+        margin: 0 0 var(--spacing-md);
+    }
+}
+
+:is(.post-year-list, .home-recent) {
+    .article-list--compact {
+        background: transparent;
+        box-shadow: none;
+        border-top: 1px solid var(--card-separator-color);
+
+        article {
+            > a {
+                padding: var(--spacing-lg) 0;
+                align-items: flex-start;
+            }
+
+            .article-details {
+                min-height: 0;
+                gap: var(--spacing-sm);
+            }
+
+            .article-title {
+                line-height: 1.45;
+            }
+
+            .post-list-description {
+                margin: 0;
+                color: var(--body-text-color);
+                font-size: 1.4rem;
+                line-height: 1.6;
+            }
+
+            .article-meta {
+                margin-top: var(--spacing-xs);
+            }
+
+            .article-image img {
+                border-radius: 4px;
+            }
+
+            a:focus-visible {
+                outline: 2px solid var(--accent-color);
+                outline-offset: 2px;
+            }
+
+            @media (hover: hover) {
+                a:hover .article-title {
+                    text-decoration: underline;
+                }
+            }
+        }
+    }
+}
+
+// 首页放大封面；窄屏让摘要与日期跨满整行，避免封面下方空出一列。
+.home-recent .article-list--compact article.has-image {
+    > a {
+        align-items: center;
+    }
+
+    .article-image {
+        flex: 0 0 132px;
+    }
+
+    .article-image img {
+        display: block;
+        width: 132px;
+        height: 99px;
+        object-fit: cover;
+    }
+
+    @media (max-width: 639px) {
+        > a {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 104px;
+            grid-template-areas:
+                "title image"
+                "description description"
+                "meta meta";
+            align-items: start;
+            column-gap: var(--spacing-md);
+            row-gap: var(--spacing-sm);
+        }
+
+        .article-details {
+            display: contents;
+        }
+
+        .article-title {
+            grid-area: title;
+        }
+
+        .post-list-description {
+            grid-area: description;
+        }
+
+        .article-meta {
+            grid-area: meta;
+            margin-top: 0;
+        }
+
+        .article-image {
+            grid-area: image;
+        }
+
+        .article-image img {
+            width: 104px;
+            height: 78px;
+        }
+    }
+}
+
+// 首页只保留一个短介绍和可直达的主题、文章入口。
+.home-page {
+    .home-intro {
+        padding-block: var(--spacing-md) var(--spacing-2xl);
+        border-bottom: 1px solid var(--card-separator-color);
+
+        .home-eyebrow {
+            margin: 0 0 var(--spacing-md);
+            color: var(--accent-color);
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--card-text-color-main);
+            font-size: clamp(2.8rem, 3vw, 3.6rem);
+            line-height: 1.3;
+        }
+
+        > p:last-child {
+            max-width: 36em;
+            margin: var(--spacing-md) 0 0;
+            color: var(--body-text-color);
+            line-height: 1.7;
+        }
+    }
+
+    .home-search {
+        label {
+            display: block;
+            margin-bottom: var(--spacing-sm);
+            color: var(--card-text-color-main);
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .home-search__fields {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        input {
+            min-width: 0;
+            flex: 1;
+            height: 44px;
+            padding: 0 var(--spacing-md);
+            border: 1px solid var(--card-separator-color);
+            border-radius: 4px;
+            color: var(--card-text-color-main);
+            background: var(--card-background);
+            font: inherit;
+        }
+
+        button {
+            min-height: 44px;
+            padding: 0 var(--spacing-lg);
+            border: 0;
+            border-radius: 4px;
+            color: var(--accent-color-text);
+            background: var(--accent-color);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        input:focus-visible,
+        button:focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+    }
+
+    .home-search--mobile {
+        @media (min-width: 1024px) {
+            display: none;
+        }
+    }
+
+    .home-search--desktop {
+        padding: var(--spacing-lg);
+        border-radius: var(--card-border-radius);
+        background: var(--card-background);
+
+        @media (max-width: 1023px) {
+            display: none;
+        }
+    }
+
+    .home-topics h2,
+    .home-section-heading h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        color: var(--card-text-color-main);
+    }
+
+    .home-topic-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--spacing-md);
+        margin-top: var(--spacing-lg);
+
+        a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            padding: 0 var(--spacing-md);
+            border: 1px solid var(--card-separator-color);
+            border-radius: 4px;
+            color: var(--card-text-color-main);
+            background: var(--card-background);
+
+            @media (hover: hover) {
+                &:hover {
+                    color: var(--accent-color);
+                    border-color: var(--accent-color);
+                }
+            }
+        }
+    }
+
+    .home-section-heading {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+
+        a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            font-size: 1.4rem;
+        }
+    }
+
+    .home-topic-links a:focus-visible,
+    .home-section-heading a:focus-visible {
+        outline: 2px solid var(--accent-color);
+        outline-offset: 2px;
+    }
+}
+
+// 完整系列目录：篇序与当前篇为文字信息，链接保留可见的键盘焦点。
+.article-page .article-series-nav {
+    list-style: none;
+    counter-reset: series-article;
+    margin: 0;
+    padding: 0;
+
+    li {
+        counter-increment: series-article;
+        display: flex;
+        align-items: baseline;
+        gap: 0.75em;
+        min-height: 40px;
+        line-height: 1.5;
+
+        &::before {
+            content: counter(series-article, decimal-leading-zero);
+            flex: 0 0 2em;
+            color: var(--body-text-color);
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
+    .article-series-nav__link,
+    .article-series-nav__current {
+        display: inline-block;
+        padding-block: 8px;
+        font-size: 1.5rem;
+        overflow-wrap: anywhere;
+    }
+
+    .article-series-nav__link {
+        color: var(--card-text-color-main);
+
+        &:hover {
+            color: var(--accent-color);
+            text-decoration: underline;
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+    }
+
+    .article-series-nav__current {
+        color: var(--accent-color);
+        font-weight: 600;
+    }
+
+    .article-series-nav__status {
+        margin-inline-start: 0.6em;
+        font-size: 1.2rem;
+        font-weight: 400;
+        white-space: nowrap;
+    }
+}
+
+.article-page.reading-kami .article-series {
+    --accent-color: #1b365d;
+}
+
+:root[data-scheme="dark"] .article-page.reading-kami .article-series {
+    --accent-color: #b8cee8;
+}
+
+:root[data-scheme="dark"] .article-page.reading-kami .main-article {
+    --card-background: #30302e;
+    --card-text-color-main: #f0eee8;
+    --card-text-color-secondary: #ccc9c1;
+    --card-text-color-tertiary: #b8b4aa;
+    --accent-color: #b8cee8;
+    --accent-color-darker: #d2e0f0;
+    --blockquote-background-color: #3c3c39;
+    --code-background-color: #42423d;
+    --code-text-color: #f0eee8;
+    --pre-background-color: #252523;
+    --pre-text-color: #f0eee8;
+    --table-border-color: #64635d;
+    --tr-even-background-color: #393936;
+
+    .article-header .article-category a {
+        background-color: #404d5d !important;
+        color: #e3eaf1 !important;
+    }
+}
