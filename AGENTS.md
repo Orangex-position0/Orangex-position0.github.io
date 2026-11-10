@@ -34,7 +34,7 @@ hugo new posts/my-article.md
 hugo new posts/category-name/article-name.md
 ```
 
-创建或协助撰写 **Starlight Log** 周刊时，先读取 `archetypes/starlight-log.md`，沿用其中的栏目与填写提醒；正文由作者手写，不另起周刊模板。新建一期使用 `hugo new content -k starlight-log posts/starlight-log/01/index.md`（将 `01` 换成当期期号），发布前删除空栏目与填写提醒。
+创建或协助撰写 **Starlight Log** 周刊时，先读取 `archetypes/starlight-log.md`，沿用其中的栏目与填写提醒；正文由作者手写，不另起周刊模板。新建一期使用 `hugo new content -k starlight-log starlight-log/01/index.md`（将 `01` 换成当期期号），发布前删除空栏目与填写提醒。周刊放在 `content/starlight-log/`，与 `content/posts/` 下的文章分开。
 
 ### 构建与部署
 ```bash

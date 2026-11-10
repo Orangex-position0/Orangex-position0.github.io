@@ -1,4 +1,15 @@
 {{ define "main" }}
+    {{ if eq .Section "starlight-log" }}
+    <header class="starlight-banner">
+        <img class="starlight-banner__image" src="/img/starlight-banner.jpg" alt="《少女歌剧》九位舞台少女的合影" width="1920" height="1080">
+        <div class="starlight-banner__content">
+            <p class="starlight-banner__eyebrow">PERSONAL WEEKLY · 个人周刊</p>
+            <h1>{{ .Title }}</h1>
+            {{ with .Params.description }}<p class="starlight-banner__description">{{ . }}</p>{{ end }}
+            <p class="starlight-banner__count">已发布 {{ len .RegularPages }} 期</p>
+        </div>
+    </header>
+    {{ else }}
     <header>
         <h3 class="section-title">
             {{ if eq .Parent (.GetPage "/") }}
@@ -37,6 +48,7 @@
             {{ end }}
         </div>
     </header>
+    {{ end }}
 
     {{- $pages := partial "helper/pages.html" . -}}
     {{- $subsections := .Sections -}}

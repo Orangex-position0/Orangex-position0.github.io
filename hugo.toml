@@ -33,6 +33,11 @@ defaultContentLanguage = 'zh-cn'
     weight = 20
 
   [[menus.main]]
+    name = '周刊'
+    pageRef = '/starlight-log'
+    weight = 25
+
+  [[menus.main]]
     name = '分类'
     pageRef = '/categories'
     weight = 30
