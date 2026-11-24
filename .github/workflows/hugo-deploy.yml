@@ -30,8 +30,8 @@ jobs:
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v3
         with:
-          # 使用最新 Hugo 版本
-          hugo-version: latest
+          # 固定到本地已验证版本，避免 latest 升级改变主题的 Sass 构建要求
+          hugo-version: '0.157.0'
           # 使用 extended 版本（支持 SCSS/SASS）
           extended: true
 
