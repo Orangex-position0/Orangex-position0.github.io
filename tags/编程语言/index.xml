@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>编程语言 on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80/</link><description>Recent content in 编程语言 on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Tue, 24 Nov 2026 14:36:45 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80/index.xml" rel="self" type="application/rss+xml"/><item><title>认识 Ada：关键系统里的编程语言</title><link>https://Orangex-position0.github.io/posts/programming-language/introducing-ada/</link><pubDate>Tue, 24 Nov 2026 14:36:45 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/programming-language/introducing-ada/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 认识 Ada：关键系统里的编程语言" /&gt;&lt;p&gt;最近在网上闲逛时，我无意间发现了一门以安全性闻名的语言：Ada。作为一个 Rust 爱好者，我有点好奇，它通过哪些机制减少程序中的错误？&lt;/p&gt;
+&lt;p&gt;Ada 在 1983 年首次标准化，比 C 的首次 ANSI 标准化（1989 年）还早。它是一门通用编程语言，在航空航天、铁路和关键控制系统等领域有公开的使用记录。&lt;/p&gt;
+&lt;p&gt;先用两个温度相关的小例子，看看 Ada 怎么区分数据的类型、限制数值范围，以及约束一次操作。这里讨论的是这些机制如何发现错误，不展开它与 Rust 在内存安全机制上的比较。&lt;/p&gt;
+&lt;h2 id="ada-如何表达合法的数据与操作"&gt;&lt;a href="#ada-%e5%a6%82%e4%bd%95%e8%a1%a8%e8%be%be%e5%90%88%e6%b3%95%e7%9a%84%e6%95%b0%e6%8d%ae%e4%b8%8e%e6%93%8d%e4%bd%9c" class="header-anchor"&gt;&lt;/a&gt;Ada 如何表达合法的数据与操作
+&lt;/h2&gt;&lt;h3 id="场景一温度和压力不能因为都是数字就混着用"&gt;&lt;a href="#%e5%9c%ba%e6%99%af%e4%b8%80%e6%b8%a9%e5%ba%a6%e5%92%8c%e5%8e%8b%e5%8a%9b%e4%b8%8d%e8%83%bd%e5%9b%a0%e4%b8%ba%e9%83%bd%e6%98%af%e6%95%b0%e5%ad%97%e5%b0%b1%e6%b7%b7%e7%9d%80%e7%94%a8" class="header-anchor"&gt;&lt;/a&gt;场景一：温度和压力，不能因为都是数字就混着用
+&lt;/h3&gt;&lt;p&gt;假设我们要接收传感器数据：温度的合法范围是 -40 到 125，压力的合法范围是 0 到 300。这里的范围只是为了演示语言特性，不对应实际设备。&lt;/p&gt;
+&lt;p&gt;如果把它们都存成普通整数，就需要额外检查两件事：数值有没有超出范围，以及有没有把压力误当成温度。&lt;/p&gt;
+&lt;p&gt;Ada 可以直接把这些要求写进类型定义：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-ada" data-lang="ada"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;type&lt;/span&gt; &lt;span class="kt"&gt;Temperature&lt;/span&gt; &lt;span class="kr"&gt;is&lt;/span&gt; &lt;span class="kr"&gt;range&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;40&lt;/span&gt; &lt;span class="p"&gt;..&lt;/span&gt; &lt;span class="mi"&gt;125&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;type&lt;/span&gt; &lt;span class="kt"&gt;Pressure&lt;/span&gt; &lt;span class="kr"&gt;is&lt;/span&gt; &lt;span class="kr"&gt;range&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt; &lt;span class="p"&gt;..&lt;/span&gt; &lt;span class="mi"&gt;300&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;&lt;code&gt;type&lt;/code&gt; 声明类型，&lt;code&gt;range&lt;/code&gt; 后面写允许的取值范围，&lt;code&gt;..&lt;/code&gt; 表示包含两端的区间。这里定义的是两个独立的整数类型。&lt;/p&gt;
+&lt;p&gt;再声明两个变量。Ada 把变量名写在类型前面，用 &lt;code&gt;:=&lt;/code&gt; 赋值：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-ada" data-lang="ada"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Current_Temperature&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Temperature&lt;/span&gt; &lt;span class="p"&gt;:=&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Current_Pressure&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;Pressure&lt;/span&gt; &lt;span class="p"&gt;:=&lt;/span&gt; &lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;即使两个类型的取值范围有重叠，也不能直接混用。下面这行代码会产生编译错误：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-ada" data-lang="ada"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Current_Temperature&lt;/span&gt; &lt;span class="p"&gt;:=&lt;/span&gt; &lt;span class="n"&gt;Current_Pressure&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;范围约束检查的是另一件事：值是否超出了类型允许的范围。假设 &lt;code&gt;Read_Sensor&lt;/code&gt; 是一个返回 &lt;code&gt;Integer&lt;/code&gt; 的传感器读取函数：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-ada" data-lang="ada"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="n"&gt;Current_Temperature&lt;/span&gt; &lt;span class="p"&gt;:=&lt;/span&gt; &lt;span class="n"&gt;Temperature&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Read_Sensor&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;这里的 &lt;code&gt;Temperature (...)&lt;/code&gt; 表示显式类型转换。如果传感器返回 &lt;code&gt;200&lt;/code&gt;，在启用相应运行时检查的情况下，就会触发 &lt;code&gt;Constraint_Error&lt;/code&gt;，而不会把它作为合法温度存进去。&lt;/p&gt;
+&lt;p&gt;温度与压力混用，可以通过类型检查发现；运行时才读到的数据，则需要运行时检查。检查能发现错误，但如何处理错误、让系统继续安全运行，仍然需要程序员设计。&lt;/p&gt;
+&lt;p&gt;Java 和 Rust 也能表达这些限制，比如用类或 newtype 区分温度与压力，在构造时校验范围。Ada 提供了直接声明整数类型及其范围的语法，不需要先写一套包装和校验代码。&lt;/p&gt;
+&lt;h3 id="场景二温度合法也不代表这次调整就合法"&gt;&lt;a href="#%e5%9c%ba%e6%99%af%e4%ba%8c%e6%b8%a9%e5%ba%a6%e5%90%88%e6%b3%95%e4%b9%9f%e4%b8%8d%e4%bb%a3%e8%a1%a8%e8%bf%99%e6%ac%a1%e8%b0%83%e6%95%b4%e5%b0%b1%e5%90%88%e6%b3%95" class="header-anchor"&gt;&lt;/a&gt;场景二：温度合法，也不代表这次调整就合法
+&lt;/h3&gt;&lt;p&gt;继续用温度举例。假设有一个温控程序，目标温度必须在 -40 到 125 之间，而且每次调整不能超过 5 度。这里限制的是程序中的目标设定值，不是实际设备的升温速度。&lt;/p&gt;
+&lt;p&gt;从 20 度直接改到 100 度，两个值都符合 &lt;code&gt;Temperature&lt;/code&gt; 的范围，但这次调整不符合要求。这个限制取决于调整前后的值，仅靠类型的固定范围表达不了。&lt;/p&gt;
+&lt;p&gt;Ada 可以把它写成操作的前置条件，再用后置条件说明正常返回时应该得到什么结果：&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-ada" data-lang="ada"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kd"&gt;procedure&lt;/span&gt; &lt;span class="nf"&gt;Set_Target&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nv"&gt;Target&lt;/span&gt; &lt;span class="p"&gt;: &lt;/span&gt;&lt;span class="nv"&gt;in&lt;/span&gt; &lt;span class="nv"&gt;out&lt;/span&gt; &lt;span class="nv"&gt;Temperature&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nv"&gt;Requested&lt;/span&gt; &lt;span class="p"&gt;: &lt;/span&gt;&lt;span class="nv"&gt;Temperature&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kn"&gt;with&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="nn"&gt;Pre&lt;/span&gt; &lt;span class="p"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="kr"&gt;abs&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Integer&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Requested&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt; &lt;span class="kt"&gt;Integer&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Target&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;=&lt;/span&gt; &lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;Post&lt;/span&gt; &lt;span class="p"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;Target&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;Requested&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kr"&gt;is&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kr"&gt;begin&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt; &lt;span class="n"&gt;Target&lt;/span&gt; &lt;span class="p"&gt;:=&lt;/span&gt; &lt;span class="n"&gt;Requested&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;&lt;span class="kr"&gt;end&lt;/span&gt; &lt;span class="nf"&gt;Set_Target&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;不熟悉 Ada 语法的话，先看这三处就够了（其实我也不熟悉&amp;hellip;）：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;in out&lt;/code&gt; 表示参数既可以读取，也可以修改。&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Pre&lt;/code&gt; 是前置条件：调用时，新旧目标温度的差值不能超过 5。这里先转成 &lt;code&gt;Integer&lt;/code&gt; 再相减，避免用温度类型本身承载差值计算。&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Post&lt;/code&gt; 是后置条件：过程正常返回时，目标温度必须等于请求的值。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;假设当前目标是 20 度，设成 23 度符合前置条件；直接设成 100 度则不符合。在启用契约检查时，后者会在执行过程体之前触发 &lt;code&gt;Assertion_Error&lt;/code&gt;。如果以后修改了实现，导致正常返回时没有把目标设成请求的值，后置条件检查也会发现问题。&lt;/p&gt;
+&lt;p&gt;这个例子的实现只有一行，契约显得比实现还长。不过，接口允许怎样调用、承诺什么结果，都能直接从声明中读到；实现变复杂后，这些要求仍然可以保留。&lt;/p&gt;
+&lt;p&gt;契约检查需要显式启用，比如使用 GNAT 的 &lt;code&gt;-gnata&lt;/code&gt; 选项，或配置 &lt;code&gt;Assertion_Policy (Check)&lt;/code&gt;。不能假定写了 &lt;code&gt;Pre&lt;/code&gt;、&lt;code&gt;Post&lt;/code&gt;，构建出来的程序就一定会执行检查。&lt;/p&gt;
+
+ &lt;blockquote&gt;
+ &lt;p&gt;以上代码是讲解用片段，尚未编译验证。范围检查和契约检查的行为均以前述检查已启用为前提。&lt;/p&gt;
+
+ &lt;/blockquote&gt;
+&lt;p&gt;类型、范围和契约各自检查不同的问题，但都需要程序员先写出要求。如果范围本身定义错了，或者契约漏掉了一项业务限制，这些检查并不会自动知道。&lt;/p&gt;
+&lt;h3 id="原生并发与-spark"&gt;&lt;a href="#%e5%8e%9f%e7%94%9f%e5%b9%b6%e5%8f%91%e4%b8%8e-spark" class="header-anchor"&gt;&lt;/a&gt;原生并发与 SPARK
+&lt;/h3&gt;&lt;p&gt;除了这两个例子，Ada 还把并发任务和同步机制放进了语言本身。任务（task）可以并发执行，受保护对象（protected object）可以协调对共享数据的访问。对需要同时处理多个传感器、控制回路或通信流程的程序，这些机制可以用来组织并发工作；实时调度还涉及优先级、运行时配置等内容，这里先不展开。&lt;/p&gt;
+&lt;p&gt;&lt;a class="link" href="https://docs.adacore.com/spark2014-docs/html/ug/en/introduction.html" target="_blank" rel="noopener"
+ &gt;SPARK&lt;/a&gt; 则用于进一步验证程序。它基于 Ada，包含便于分析的语言限制、验证标注和相关工具，可以在明确的假设和证明条件下，证明某些运行时错误不会发生，或程序满足指定的契约。本文没有运行证明工具，上面的示例只用于说明检查机制，不声称已经完成形式化验证。&lt;/p&gt;
+&lt;h2 id="ada-为什么主要活跃在关键系统领域"&gt;&lt;a href="#ada-%e4%b8%ba%e4%bb%80%e4%b9%88%e4%b8%bb%e8%a6%81%e6%b4%bb%e8%b7%83%e5%9c%a8%e5%85%b3%e9%94%ae%e7%b3%bb%e7%bb%9f%e9%a2%86%e5%9f%9f" class="header-anchor"&gt;&lt;/a&gt;Ada 为什么主要活跃在关键系统领域？
+&lt;/h2&gt;&lt;p&gt;这些设计和 Ada 的来历有关。上世纪 70 年代，美国国防部希望统一软件开发使用的语言。当时不同项目使用不同的语言和工具，增加了人员培训、工具维护和代码复用的难度。&lt;/p&gt;
+&lt;p&gt;其中一些软件需要控制设备、同时处理多个任务，并在规定时间内作出响应。可靠性、实时处理和长期维护，也是设计时需要考虑的要求。美国国防部通过方案竞争选择设计，最终由 Jean Ichbiah 领导的团队提出的方案胜出。&lt;a class="link" href="https://learn.adacore.com/courses/intro-to-ada/chapters/introduction.html" target="_blank" rel="noopener"
+ &gt;AdaCore 的入门资料&lt;/a&gt;介绍了这段背景。&lt;/p&gt;
+&lt;p&gt;具体到应用，&lt;a class="link" href="https://www.adacore.com/press/enyse-railway-signaling-systems" target="_blank" rel="noopener"
+ &gt;AdaCore 在 2022 年发布的 ENYSE 案例&lt;/a&gt;中，ENYSE 选择 Ada 和 GNAT Pro 开发无线闭塞中心（Radio Block Centre，RBC）。它负责生成并向列车发送运行许可，告诉列车可以进入哪些区段。Ada 在这里参与的是铁路信号与行车控制系统的开发。&lt;/p&gt;
+&lt;p&gt;&lt;a class="link" href="https://www.adaic.org/advantages/projects/" target="_blank" rel="noopener"
+ &gt;Ada Resource Association（Ada 资源协会）的公开项目清单&lt;/a&gt;还列出了 Airbus、Boeing 的多个机型，以及包括中国在内的多个国家的政府空管机构。&lt;/p&gt;
+&lt;p&gt;这些材料说明了具体的使用方向，但不等于当前部署清单：ENYSE 公告发布时，项目仍处于概念验证演示系统的开发阶段；ARA 清单则没有交代各条目的具体模块和使用时间。不能据此推断它们目前的使用状态。&lt;/p&gt;
+&lt;h2 id="为什么-ada-在-github-上这么冷清"&gt;&lt;a href="#%e4%b8%ba%e4%bb%80%e4%b9%88-ada-%e5%9c%a8-github-%e4%b8%8a%e8%bf%99%e4%b9%88%e5%86%b7%e6%b8%85" class="header-anchor"&gt;&lt;/a&gt;为什么 Ada 在 GitHub 上这么冷清？
+&lt;/h2&gt;&lt;p&gt;我在 GitHub 上用 &lt;code&gt;language:Ada&lt;/code&gt; 搜索，按 star 数量排序，前 20 个项目中五花八门的类型都有：游戏、编译器、操作系统、通用开发工具，甚至还有 Web 框架，但当时没有一个超过 1k star。&lt;/p&gt;
+&lt;p&gt;有意思的是，排在前列的还有编程博主 Tsoding 的游戏项目 &lt;a class="link" href="https://github.com/tsoding/eepers" target="_blank" rel="noopener"
+ &gt;eepers&lt;/a&gt;。前面看到的还是航空航天和铁路系统，到了 GitHub 上，却是一个游戏项目吸引了我的注意。&lt;/p&gt;
+&lt;p&gt;这次搜索只能说明，当时按这个条件找到的热门仓库 star 数不高，不能代表 Ada 的全部项目或工业使用情况。&lt;/p&gt;
+&lt;p&gt;为什么会有这种反差？我觉得可能和它的应用场景有关。航空航天、国防和工业控制领域的软件，很多是为特定设备或客户开发的，可能涉及保密要求，也未必有公开维护的动力。这可以解释为什么一部分代码没有出现在公开仓库里，但还不足以解释整个生态的热度。&lt;/p&gt;
+&lt;p&gt;另一个可能的原因是，普通开发者接触 Ada 的机会较少。如果工作中用不到，业余项目又有更熟悉的语言可选，可能就很少会想到它。这些都只是可能的解释，仅凭这次搜索，还不能确定它们各自有多大影响。&lt;/p&gt;</description></item></channel></rss>
