@@ -66,8 +66,8 @@
  &gt;eepers&lt;/a&gt;。前面看到的还是航空航天和铁路系统，到了 GitHub 上，却是一个游戏项目吸引了我的注意。&lt;/p&gt;
 &lt;p&gt;这次搜索只能说明，当时按这个条件找到的热门仓库 star 数不高，不能代表 Ada 的全部项目或工业使用情况。&lt;/p&gt;
 &lt;p&gt;为什么会有这种反差？我觉得可能和它的应用场景有关。航空航天、国防和工业控制领域的软件，很多是为特定设备或客户开发的，可能涉及保密要求，也未必有公开维护的动力。这可以解释为什么一部分代码没有出现在公开仓库里，但还不足以解释整个生态的热度。&lt;/p&gt;
-&lt;p&gt;另一个可能的原因是，普通开发者接触 Ada 的机会较少。如果工作中用不到，业余项目又有更熟悉的语言可选，可能就很少会想到它。这些都只是可能的解释，仅凭这次搜索，还不能确定它们各自有多大影响。&lt;/p&gt;</description></item><item><title>常见编程语言的错误处理方式对比</title><link>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</link><pubDate>Thu, 10 Sep 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 常见编程语言的错误处理方式对比" /&gt;&lt;h1 id="常见编程语言的错误处理方式对比"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e7%bc%96%e7%a8%8b%e8%af%ad%e8%a8%80%e7%9a%84%e9%94%99%e8%af%af%e5%a4%84%e7%90%86%e6%96%b9%e5%bc%8f%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;常见编程语言的错误处理方式对比
-&lt;/h1&gt;
+&lt;p&gt;另一个可能的原因是，普通开发者接触 Ada 的机会较少。如果工作中用不到，业余项目又有更熟悉的语言可选，可能就很少会想到它。这些都只是可能的解释，仅凭这次搜索，还不能确定它们各自有多大影响。&lt;/p&gt;</description></item><item><title>常见编程语言的错误处理方式对比</title><link>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</link><pubDate>Thu, 10 Sep 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 常见编程语言的错误处理方式对比" /&gt;&lt;h2 id="常见编程语言的错误处理方式对比"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e7%bc%96%e7%a8%8b%e8%af%ad%e8%a8%80%e7%9a%84%e9%94%99%e8%af%af%e5%a4%84%e7%90%86%e6%96%b9%e5%bc%8f%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;常见编程语言的错误处理方式对比
+&lt;/h2&gt;
  &lt;blockquote&gt;
  &lt;p&gt;先说明，笔者主要以后端开发视角来讨论，比较熟悉 Java、Go 和 Rust。本文也会顺带提到 Python、TypeScript/JavaScript、Swift、Kotlin、Scala、Haskell、Zig 等语言，但重点不是做语言百科（因为我大部分也不会……），而是比较不同错误处理设计背后的取舍。&lt;/p&gt;
 

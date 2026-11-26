@@ -1,4 +1,260 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Rust on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/rust/</link><description>Recent content in Rust on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sun, 08 Nov 2026 00:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/rust/index.xml" rel="self" type="application/rss+xml"/><item><title>Google Rust Style Guide 阅读笔记：我认为值得关注的规则</title><link>https://Orangex-position0.github.io/posts/rust/rust-style-guide-practical-rules/</link><pubDate>Sun, 08 Nov 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-style-guide-practical-rules/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post Google Rust Style Guide 阅读笔记：我认为值得关注的规则" /&gt;&lt;p&gt;最近 Google 发布了一个文档：&lt;a class="link" href="https://google.github.io/styleguide/rustguide.html" target="_blank" rel="noopener"
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Rust on Orangex-position0的技术博客</title><link>https://Orangex-position0.github.io/tags/rust/</link><description>Recent content in Rust on Orangex-position0的技术博客</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Thu, 26 Nov 2026 00:00:00 +0800</lastBuildDate><atom:link href="https://Orangex-position0.github.io/tags/rust/index.xml" rel="self" type="application/rss+xml"/><item><title>认识 GPUI：像游戏引擎一样绘制桌面界面</title><link>https://Orangex-position0.github.io/posts/rust/gpui-rendering/</link><pubDate>Thu, 26 Nov 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/gpui-rendering/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 认识 GPUI：像游戏引擎一样绘制桌面界面" /&gt;&lt;h2 id="1-discord-让-gpui-小火了一把"&gt;&lt;a href="#1-discord-%e8%ae%a9-gpui-%e5%b0%8f%e7%81%ab%e4%ba%86%e4%b8%80%e6%8a%8a" class="header-anchor"&gt;&lt;/a&gt;1. Discord 让 GPUI 小火了一把
+&lt;/h2&gt;&lt;p&gt;因为今年将 IDE 从 vscode 换到 zed 时，发现这个 zed 的基础框架 GPUI 十分的好用，也用它开发了几个小工具，但是苦于没有太多比较火热的项目做支撑，导致其热度其实有点不上不下的。因为 Rust GUI 框架还有更火的 tauri、egui、slint 等。&lt;/p&gt;
+&lt;p&gt;但是就在 2026 年 11 月 8 日，Discord 在 Youtube 官方频道发布了一个视频：宣布其开发团队将开启 Phoenix 计划，也就是将 Discord 的桌面端用 Rust + GPUI 重写。&lt;/p&gt;
+&lt;p&gt;这属实是让 GPUI 小火了一把。那作为一个 GPUI 框架的爱好者，我希望向你介绍一下 GPUI 框架是什么，以及其独特的渲染机制。&lt;/p&gt;
+&lt;p&gt;这篇文章会从“像游戏引擎一样渲染”这个说法出发，用一个简化的聊天界面，讲清 GPUI 如何把 UI 元素一步步变成屏幕上的像素，以及 shader、实例化绘制和字形图集在其中起什么作用。即使没有图形学基础，也可以顺着例子理解这套流程。&lt;/p&gt;
+&lt;h2 id="2-gpui-是什么"&gt;&lt;a href="#2-gpui-%e6%98%af%e4%bb%80%e4%b9%88" class="header-anchor"&gt;&lt;/a&gt;2. GPUI 是什么？
+&lt;/h2&gt;&lt;p&gt;&lt;a class="link" href="https://gpui.rs/" target="_blank" rel="noopener"
+ &gt;GPUI&lt;/a&gt; 是 Zed 团队开发的 Rust GUI 框架，Zed 编辑器的界面就是用它构建和绘制的。除了绘制界面，它还提供状态管理、事件处理和布局等能力，让开发者能把应用数据、用户操作和界面展示连接起来。&lt;/p&gt;
+&lt;p&gt;使用 GPUI 时，开发者用 Rust 组合界面元素，设置尺寸、颜色和布局方式，再注册点击、键盘等事件的处理逻辑。比如一个聊天窗口，可以由消息列表、输入框和发送按钮组成，GPUI 负责把这些描述转换成可以交互的界面。它的样式 API 借鉴了 CSS 的一些概念，熟悉 Web 开发的读者会看到 Flex 布局等熟悉的写法。&lt;/p&gt;
+&lt;p&gt;从名字可以联想到 GPU 与 UI，但“使用 GPU”还不足以说明它与其他桌面框架的区别。先对比几种常见方案的 UI 渲染路线：&lt;/p&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;方案&lt;/th&gt;
+ &lt;th&gt;常见 UI 描述方式&lt;/th&gt;
+ &lt;th&gt;谁负责 UI 布局与绘制&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Electron&lt;/td&gt;
+ &lt;td&gt;HTML、CSS、JavaScript&lt;/td&gt;
+ &lt;td&gt;随应用分发的 Chromium&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Tauri&lt;/td&gt;
+ &lt;td&gt;Web 前端&lt;/td&gt;
+ &lt;td&gt;系统 WebView&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;GPUI&lt;/td&gt;
+ &lt;td&gt;Rust 元素与样式 API&lt;/td&gt;
+ &lt;td&gt;GPUI 自己的布局与渲染实现&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;a class="link" href="https://www.electronjs.org/docs/latest/" target="_blank" rel="noopener"
+ &gt;Electron&lt;/a&gt; 和 &lt;a class="link" href="https://v2.tauri.app/concept/architecture/" target="_blank" rel="noopener"
+ &gt;Tauri&lt;/a&gt; 都可以利用浏览器引擎的 GPU 加速能力。GPUI 则为自己的 UI 元素实现布局和绘制流程，可以围绕界面的需要设计渲染管线。&lt;/p&gt;
+&lt;p&gt;简单来说，就是 GPUI 自己掌控 UI 的布局和绘制管线。&lt;/p&gt;
+&lt;p&gt;那么，GPUI 怎样把消息列表、按钮这样的 UI 元素交给 GPU 绘制？这就涉及它与游戏引擎相似的渲染思路了。&lt;/p&gt;
+&lt;h2 id="3-为什么说-gpui-像游戏引擎一样渲染"&gt;&lt;a href="#3-%e4%b8%ba%e4%bb%80%e4%b9%88%e8%af%b4-gpui-%e5%83%8f%e6%b8%b8%e6%88%8f%e5%bc%95%e6%93%8e%e4%b8%80%e6%a0%b7%e6%b8%b2%e6%9f%93" class="header-anchor"&gt;&lt;/a&gt;3. 为什么说 GPUI 像游戏引擎一样渲染？
+&lt;/h2&gt;&lt;h3 id="31-游戏引擎的渲染逻辑概述"&gt;&lt;a href="#31-%e6%b8%b8%e6%88%8f%e5%bc%95%e6%93%8e%e7%9a%84%e6%b8%b2%e6%9f%93%e9%80%bb%e8%be%91%e6%a6%82%e8%bf%b0" class="header-anchor"&gt;&lt;/a&gt;3.1 游戏引擎的渲染逻辑概述
+&lt;/h3&gt;&lt;p&gt;假设要在一个 2D 游戏中绘制敌人。游戏逻辑关心它有多少血量、是否正在攻击；但渲染阶段需要的是位置、形状、纹理和颜色等底层渲染数据。敌人受伤后变红，游戏逻辑决定何时变红，渲染器根据颜色参数把它画出来。&lt;/p&gt;
+&lt;p&gt;所以，可简单理解为：&lt;strong&gt;游戏引擎是将“游戏场景”转为“结构化的渲染数据”&lt;/strong&gt;，方便交给 GPU 批量绘制。&lt;/p&gt;
+&lt;p&gt;比如 Godot 的 2D 渲染机制：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Godot 不是直接将整个游戏画面当做一张大图片来处理&lt;/li&gt;
+&lt;li&gt;而是通过场景树（Scene Tree）先组织游戏对象（比如玩家、敌人、地性等）&lt;/li&gt;
+&lt;li&gt;然后再将可见对象转为底层渲染数据，比如几何形状、纹理、颜色等&lt;/li&gt;
+&lt;li&gt;接着通过 &lt;code&gt;RenderingServer&lt;/code&gt; 代码管理渲染资源和绘制命令，最终交给 GPU 绘制&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;再比如 Unity 的 2D 渲染机制：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Unity 使用一些组件表示人物、人物位置等可见对象&lt;/li&gt;
+&lt;li&gt;再根据组件准备底层渲染数据，并通过渲染管线将绘制命令交给 GPU&lt;/li&gt;
+&lt;li&gt;这样 Unity 的底层渲染器就不必理解“玩家”、“敌人”等业务含义，直接处理几何、材质等底层渲染数据即可&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/section-3-1-game-objects-to-render-data-to-gpu.png"
+ alt="游戏对象转换为渲染数据并交给 GPU 绘制"&gt;
+&lt;/figure&gt;
+
+&lt;h3 id="32-gpui-的渲染逻辑概述"&gt;&lt;a href="#32-gpui-%e7%9a%84%e6%b8%b2%e6%9f%93%e9%80%bb%e8%be%91%e6%a6%82%e8%bf%b0" class="header-anchor"&gt;&lt;/a&gt;3.2 GPUI 的渲染逻辑概述
+&lt;/h3&gt;&lt;p&gt;GPUI 也采用了类似游戏引擎的渲染逻辑：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;应用层声明按钮、消息列表和输入框等 UI 组件&lt;/li&gt;
+&lt;li&gt;绘制时把它们全部转换成底层图形基元。GPU 不用理解“这是一个 button 组件”，它执行的是针对几何、纹理和像素的计算。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;所以，你可以简单理解为：所有上层的 UI 组件都能由底层图形基元组合而成，所以渲染管线直接处理底层图形基元即可。就类似七巧板（待讨论点1：这里可能要换一个更通用的真实案例）&lt;/p&gt;
+&lt;p&gt;这里用一个简化的聊天界面作例子：&lt;/p&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;界面内容&lt;/th&gt;
+ &lt;th&gt;绘制时可以拆成什么&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;消息行的背景&lt;/td&gt;
+ &lt;td&gt;一个带颜色、尺寸和圆角等参数的矩形&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;用户头像&lt;/td&gt;
+ &lt;td&gt;图像纹理，以及它在界面中的目标区域&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;用户名和消息正文&lt;/td&gt;
+ &lt;td&gt;经过排版的字形及其绘制位置&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;悬浮提示&lt;/td&gt;
+ &lt;td&gt;背景矩形、阴影和文字&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;!-- 配图 01：聊天界面与图形基元拆解。左侧为简化聊天界面，右侧对应矩形、字形、头像纹理和阴影；以连线标明对应关系，注明为教学示意。建议文件名：chat-ui-primitives.png；插入语法：&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/chat-ui-primitives.png"
+ alt="聊天界面拆解为图形基元"&gt;
+&lt;/figure&gt;
+ --&gt;
+&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/chat-ui-primitives.png"
+ alt="聊天界面拆解为图形基元"&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;一个复杂的界面，可以由有限种类的图形基元组合出来。同一种矩形绘制逻辑既能用于消息背景，也能用于按钮背景，它们的位置、尺寸和颜色可以各不相同。&lt;/p&gt;
+&lt;p&gt;GPUI 把这些图元组织进 &lt;code&gt;Scene&lt;/code&gt;。可以将它理解为当前界面需要绘制的图形数据集合，其中还包含绘制顺序等信息。它与业务层的组件树承担不同职责：组件树描述界面如何组成，Scene 为后续绘制提供结构化的数据。&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" class="chroma"&gt;&lt;code class="language-text" data-lang="text"&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;游戏引擎：游戏对象 → 几何、纹理、变换等渲染数据 → GPU
+&lt;/span&gt;&lt;/span&gt;&lt;span class="line"&gt;&lt;span class="cl"&gt;GPUI：UI 元素 → 矩形、阴影、字形等图形数据 → GPU
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;“像游戏引擎一样渲染”主要指这里的数据组织和绘制思路。&lt;a class="link" href="https://zed.dev/blog/videogame" target="_blank" rel="noopener"
+ &gt;Zed 的官方文章&lt;/a&gt;明确谈到了游戏领域带来的启发，以及针对 UI 图元编写专用 shader 的选择。&lt;/p&gt;
+&lt;p&gt;注意：这不意味着 GPUI 使用了某个现成游戏引擎，也不意味着桌面应用要具备完整的游戏循环。&lt;/p&gt;
+&lt;h2 id="4-从-ui-元素到屏幕像素"&gt;&lt;a href="#4-%e4%bb%8e-ui-%e5%85%83%e7%b4%a0%e5%88%b0%e5%b1%8f%e5%b9%95%e5%83%8f%e7%b4%a0" class="header-anchor"&gt;&lt;/a&gt;4. 从 UI 元素到屏幕像素
+&lt;/h2&gt;&lt;p&gt;GPUI 的渲染流程负责把应用状态转换成最终显示的画面。先看其中的主要环节与对象，以及它们各自承担的职责：&lt;/p&gt;
+&lt;table&gt;
+ &lt;thead&gt;
+ &lt;tr&gt;
+ &lt;th&gt;环节或对象&lt;/th&gt;
+ &lt;th&gt;职责&lt;/th&gt;
+ &lt;/tr&gt;
+ &lt;/thead&gt;
+ &lt;tbody&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Render&lt;/td&gt;
+ &lt;td&gt;根据应用当前状态，描述界面由哪些元素组成&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Layout&lt;/td&gt;
+ &lt;td&gt;确定元素的位置和尺寸&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Prepaint&lt;/td&gt;
+ &lt;td&gt;根据布局结果，准备命中区域等后续需要的状态&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Paint&lt;/td&gt;
+ &lt;td&gt;将元素的视觉表现转换为绘制用的图元&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Scene&lt;/td&gt;
+ &lt;td&gt;汇集图元及绘制顺序等信息，供后端使用&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;图形后端&lt;/td&gt;
+ &lt;td&gt;准备绘制资源，将绘制命令提交给 GPU&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;GPU&lt;/td&gt;
+ &lt;td&gt;执行绘制命令，生成渲染结果&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;tr&gt;
+ &lt;td&gt;Present&lt;/td&gt;
+ &lt;td&gt;将渲染结果交给平台显示系统呈现&lt;/td&gt;
+ &lt;/tr&gt;
+ &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;其中，Scene 是承载绘制数据的对象；Render、Layout、Prepaint 和 Paint 等则描述处理这些数据的不同阶段。表格介绍各自的职责，下面的流程图展示它们如何衔接。&lt;/p&gt;
+&lt;p&gt;以聊天列表收到一条新消息为例：数据发生变化后，应用请求更新界面。GPUI 需要确定显示什么、每项内容放在哪里，再把图形数据交给后端绘制。&lt;/p&gt;
+&lt;p&gt;下面是省略缓存和复用细节的概念流程。它不代表每次显示刷新都要重新执行所有步骤。&lt;/p&gt;
+&lt;!-- 配图 02：单帧渲染流程。依据下方 Mermaid 制作，区分 CPU、GPU 与显示系统，并注明省略缓存和复用；箭头表示数据依赖，不表示 CPU 同步等待。建议文件名：gpui-frame-pipeline.png；插入语法：&lt;figure&gt;&lt;img src="gpui-frame-pipeline.png"
+ alt="GPUI 从状态更新到屏幕呈现的流程"&gt;
+&lt;/figure&gt;
+。后续使用图片时可替换下方 Mermaid，避免重复展示；当前保留原流程图。 --&gt;
+&lt;pre class="mermaid" style="visibility:hidden"&gt;flowchart TD
+ subgraph CPU[CPU 侧]
+ A[状态更新并请求渲染] --&gt; B[Render：构建元素树]
+ B --&gt; C[Layout：计算布局]
+ C --&gt; D[Prepaint：准备命中区域等状态]
+ D --&gt; E[Paint：产生图元并组织 Scene]
+ E --&gt; F[后端准备资源并编码绘制命令]
+ end
+ F --&gt; G[GPU 执行绘制]
+ G --&gt; H[显示系统呈现结果]&lt;/pre&gt;&lt;p&gt;图中画的是数据依赖关系。实际的命令提交、GPU 执行和显示呈现涉及异步调度，CPU 不必逐步等待所有 GPU 工作完成。&lt;/p&gt;
+&lt;h3 id="41-render根据状态构建元素树"&gt;&lt;a href="#41-render%e6%a0%b9%e6%8d%ae%e7%8a%b6%e6%80%81%e6%9e%84%e5%bb%ba%e5%85%83%e7%b4%a0%e6%a0%91" class="header-anchor"&gt;&lt;/a&gt;4.1 Render：根据状态构建元素树
+&lt;/h3&gt;&lt;p&gt;Render 负责根据应用当前状态构建元素树，描述界面包含哪些元素、这些元素如何组合。在 GPUI 中，应用可以通过实现 &lt;code&gt;Render&lt;/code&gt; Trait 来描述这部分界面。&lt;/p&gt;
+&lt;p&gt;新消息包含作者、正文和头像等信息。应用通过 &lt;code&gt;Render&lt;/code&gt; 描述这些内容如何组成界面，比如消息行里放一个头像区域，再放包含用户名和正文的文字区域。&lt;/p&gt;
+&lt;p&gt;如果你写过 React，可以先用“根据当前状态描述界面”来理解这一步。GPUI 使用 Rust 构建自己的元素树；元素树不会交给浏览器解释，也不会直接成为 GPU 命令。&lt;/p&gt;
+&lt;h3 id="42-layout确定位置和尺寸"&gt;&lt;a href="#42-layout%e7%a1%ae%e5%ae%9a%e4%bd%8d%e7%bd%ae%e5%92%8c%e5%b0%ba%e5%af%b8" class="header-anchor"&gt;&lt;/a&gt;4.2 Layout：确定位置和尺寸
+&lt;/h3&gt;&lt;p&gt;Layout（布局）负责结合窗口大小、样式和内容测量，确定元素的位置和尺寸。&lt;/p&gt;
+&lt;p&gt;对于消息行，元素树描述了组成关系，布局则要回答头像应该多大、正文能占多宽、长消息在哪里换行。比如头像占据左侧固定区域，正文使用剩余宽度；正文换行又会影响消息行的高度。&lt;/p&gt;
+&lt;p&gt;GPUI 的通用元素布局使用 &lt;code&gt;Taffy&lt;/code&gt;。自定义元素也可以参与测量，或实现适合自身的布局方式。读源码时会看到 &lt;code&gt;request_layout&lt;/code&gt;，它负责申请布局并准备阶段状态，实际布局计算随后确定元素的边界。&lt;/p&gt;
+&lt;h3 id="43-prepaint准备依赖布局的状态"&gt;&lt;a href="#43-prepaint%e5%87%86%e5%a4%87%e4%be%9d%e8%b5%96%e5%b8%83%e5%b1%80%e7%9a%84%e7%8a%b6%e6%80%81" class="header-anchor"&gt;&lt;/a&gt;4.3 Prepaint：准备依赖布局的状态
+&lt;/h3&gt;&lt;p&gt;Prepaint 是布局完成后、正式绘制前的准备阶段，负责建立依赖元素位置和尺寸的状态，供交互和后续绘制使用。&lt;/p&gt;
+&lt;p&gt;知道头像的位置后，框架才能准备它的命中测试区域，也就是 hitbox。鼠标移到这个区域时，应用才有依据判断用户正在悬停头像。&lt;/p&gt;
+&lt;h3 id="44-paint把元素转换成图元"&gt;&lt;a href="#44-paint%e6%8a%8a%e5%85%83%e7%b4%a0%e8%bd%ac%e6%8d%a2%e6%88%90%e5%9b%be%e5%85%83" class="header-anchor"&gt;&lt;/a&gt;4.4 Paint：把元素转换成图元
+&lt;/h3&gt;&lt;p&gt;Paint 负责将元素的视觉表现转换为图元，并组织进 Scene，为后端绘制提供数据。&lt;/p&gt;
+&lt;p&gt;这时消息背景的位置和大小已经确定，Paint 可以生成对应的矩形数据；头像和正文也会准备各自需要的绘制数据。&lt;/p&gt;
+&lt;h3 id="45-后端与-gpu执行绘制"&gt;&lt;a href="#45-%e5%90%8e%e7%ab%af%e4%b8%8e-gpu%e6%89%a7%e8%a1%8c%e7%bb%98%e5%88%b6" class="header-anchor"&gt;&lt;/a&gt;4.5 后端与 GPU：执行绘制
+&lt;/h3&gt;&lt;p&gt;图形后端负责把 Scene 中的绘制数据转换为 GPU 可以执行的命令；GPU 负责执行这些命令，生成渲染结果。&lt;/p&gt;
+&lt;p&gt;Scene 中的图元（Primitive）需要按正确顺序、合适批次提交。&lt;a class="link" href="https://github.com/zed-industries/zed/blob/main/crates/gpui/src/scene.rs" target="_blank" rel="noopener"
+ &gt;Scene 源码&lt;/a&gt;中的 &lt;code&gt;finish&lt;/code&gt; 和 &lt;code&gt;batches&lt;/code&gt; 参与排序与批次组织；平台后端再准备缓冲区、纹理和绘制管线，把命令编码后提交给 GPU。&lt;/p&gt;
+&lt;p&gt;GPU 随后执行 shader，处理几何位置、纹理采样、像素颜色和混合等工作。前面的 &lt;code&gt;Render&lt;/code&gt; 是应用构建界面的入口，这里的 Renderer 则是后端渲染器，二者处在不同层次。&lt;/p&gt;
+&lt;p&gt;GPUI 自绘与 Electron、Tauri 的区别也体现在这里：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;常见的 Electron、Tauri 应用由 Chromium 或系统 WebView 解释 Web UI；&lt;/li&gt;
+&lt;li&gt;GPUI 通过自己的元素、Scene 和图形后端完成 UI 绘制。浏览器同样能利用 GPU，双方采用了不同的 UI 渲染管线。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id="46-present提交显示"&gt;&lt;a href="#46-present%e6%8f%90%e4%ba%a4%e6%98%be%e7%a4%ba" class="header-anchor"&gt;&lt;/a&gt;4.6 Present：提交显示
+&lt;/h3&gt;&lt;p&gt;Present 负责通过平台的呈现机制，将渲染结果交给显示系统。它连接了生成画面与显示画面这两个环节。&lt;/p&gt;
+&lt;p&gt;Present 与“显示器已经显示这个像素”之间有调度过程，不能直接画等号。&lt;/p&gt;
+&lt;h2 id="5-gpui-采用了哪些渲染优化技术"&gt;&lt;a href="#5-gpui-%e9%87%87%e7%94%a8%e4%ba%86%e5%93%aa%e4%ba%9b%e6%b8%b2%e6%9f%93%e4%bc%98%e5%8c%96%e6%8a%80%e6%9c%af" class="header-anchor"&gt;&lt;/a&gt;5. GPUI 采用了哪些渲染优化技术？
+&lt;/h2&gt;&lt;p&gt;把界面转换成图元后，GPUI 可以针对这些图元采用专门的绘制和复用方式。下面看三项技术，以及它们分别减少了什么开销。&lt;/p&gt;
+&lt;h3 id="51-专用-shader根据参数绘制-ui-形状"&gt;&lt;a href="#51-%e4%b8%93%e7%94%a8-shader%e6%a0%b9%e6%8d%ae%e5%8f%82%e6%95%b0%e7%bb%98%e5%88%b6-ui-%e5%bd%a2%e7%8a%b6" class="header-anchor"&gt;&lt;/a&gt;5.1 专用 shader：根据参数绘制 UI 形状
+&lt;/h3&gt;&lt;p&gt;Shader（着色器）是在 GPU 上执行的程序，参与计算图形的位置和像素颜色等。GPUI 针对 UI 图元使用专用 shader，利用形状的特点完成绘制。&lt;/p&gt;
+&lt;p&gt;比如绘制一个圆角消息背景，CPU 提供位置、尺寸、颜色和圆角半径等参数，GPU 执行对应 shader 生成形状。调整背景大小或圆角时，改变参数即可，无需为每种外观预先制作和存储一张图片。&lt;/p&gt;
+&lt;!-- 配图 03：参数化绘制圆角矩形。展示同一种绘制逻辑接收不同尺寸、颜色和圆角参数，产生不同消息背景；不展开像素计算。建议文件名：rounded-rect-shader.png；插入语法：&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/rounded-rect-shader.png"
+ alt="根据参数绘制不同的消息背景"&gt;
+&lt;/figure&gt;
+ --&gt;
+&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/rounded-rect-shader.png"
+ alt="根据参数绘制不同的消息背景"&gt;
+&lt;/figure&gt;
+
+&lt;h3 id="52-实例化绘制让多个图元共享绘制逻辑"&gt;&lt;a href="#52-%e5%ae%9e%e4%be%8b%e5%8c%96%e7%bb%98%e5%88%b6%e8%ae%a9%e5%a4%9a%e4%b8%aa%e5%9b%be%e5%85%83%e5%85%b1%e4%ba%ab%e7%bb%98%e5%88%b6%e9%80%bb%e8%be%91" class="header-anchor"&gt;&lt;/a&gt;5.2 实例化绘制：让多个图元共享绘制逻辑
+&lt;/h3&gt;&lt;p&gt;实例化绘制让多个图元共享绘制逻辑，分别提供各自的数据，通过一次绘制调用处理多个兼容实例，减少逐个组织和提交绘制命令的开销。&lt;/p&gt;
+&lt;p&gt;比如聊天列表中有许多矩形背景，它们的位置、尺寸和颜色可以不同，但能够共享同一种绘制逻辑。GPU 仍然需要绘制每个背景，减少的是逐个提交它们的开销。&lt;/p&gt;
+&lt;!-- 配图 04：实例化绘制。多组位置、尺寸、颜色数据共同输入同一绘制逻辑，通过一次实例化绘制调用产生多个兼容矩形；注明须满足合批条件。建议文件名：instanced-primitives.png；插入语法：&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/instanced-primitives.png"
+ alt="共享绘制逻辑的多个图元实例"&gt;
+&lt;/figure&gt;
+ --&gt;
+&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/instanced-primitives.png"
+ alt="共享绘制逻辑的多个图元实例"&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;批量提交还要遵守遮挡顺序。例如悬浮提示的背景需要盖住下层消息文字，不能为了把同类图元放在一起绘制而随意改变顺序。&lt;/p&gt;
+&lt;h3 id="53-glyph-atlas缓存并复用字形图像"&gt;&lt;a href="#53-glyph-atlas%e7%bc%93%e5%ad%98%e5%b9%b6%e5%a4%8d%e7%94%a8%e5%ad%97%e5%bd%a2%e5%9b%be%e5%83%8f" class="header-anchor"&gt;&lt;/a&gt;5.3 Glyph Atlas：缓存并复用字形图像
+&lt;/h3&gt;&lt;p&gt;Glyph Atlas（字形图集）是集中存放字形图像的纹理，供绘制时查找和复用。将字形转换为可绘制图像的过程称为栅格化，复用已有图像可以减少重复栅格化的开销。&lt;/p&gt;
+&lt;p&gt;比如聊天列表中反复出现相同的文字，在字体、字号等条件相容时，可以复用图集中已有的字形图像，再将它们绘制到各条消息对应的位置。&lt;/p&gt;
+&lt;!-- 配图 05：字形图集复用。左侧画字形 atlas，右侧画聊天文本，用连线展示同一缓存字形被用于多个位置；注明字体、字号等条件相容，不暗示字符与字形一一对应。建议文件名：glyph-atlas-reuse.png；插入语法：&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/glyph-atlas-reuse.png"
+ alt="复用字形图集中的图像绘制文字"&gt;
+&lt;/figure&gt;
+ --&gt;
+&lt;figure&gt;&lt;img src="https://Orangex-position0.github.io/posts/rust/gpui-rendering/glyph-atlas-reuse.png"
+ alt="复用字形图集中的图像绘制文字"&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;&lt;a class="link" href="https://zed.dev/blog/videogame" target="_blank" rel="noopener"
+ &gt;Zed 的官方渲染文章&lt;/a&gt;介绍了专用 shader、实例化绘制和字形图集的应用。这些技术为 GPUI 提供了优化空间，实际性能收益仍取决于具体界面、硬件和工作负载。&lt;/p&gt;
+&lt;h2 id="6-自建渲染管线意味着什么"&gt;&lt;a href="#6-%e8%87%aa%e5%bb%ba%e6%b8%b2%e6%9f%93%e7%ae%a1%e7%ba%bf%e6%84%8f%e5%91%b3%e7%9d%80%e4%bb%80%e4%b9%88" class="header-anchor"&gt;&lt;/a&gt;6. 自建渲染管线意味着什么？
+&lt;/h2&gt;&lt;p&gt;GPUI 让框架开发者能够围绕实际 UI 需要设计图元、shader、缓存和批次组织。消息背景适合哪种绘制方式，文字资源怎样复用，都可以在自己的渲染管线中调整。&lt;/p&gt;
+&lt;p&gt;与此同时，一个桌面框架还要解决文本输入、焦点、剪贴板、可访问性、窗口系统和图形后端适配等问题。Rust 能跨平台编译，也不代表这些平台差异会自动消失。&lt;a class="link" href="https://zed.dev/blog/zed-decoded-linux-when" target="_blank" rel="noopener"
+ &gt;Zed 的 Linux 移植文章&lt;/a&gt;展示了平台窗口与渲染后端之间需要承担的适配工作。&lt;/p&gt;
+&lt;p&gt;这些成本主要由框架和平台实现承担，应用开发者可以复用 GPUI 提供的能力；如果涉及自定义控件或平台特性，仍可能需要处理更底层的问题。&lt;/p&gt;
+&lt;p&gt;选择这条路线，意味着用更明确的 UI 问题域换取针对性优化空间。具体能获得多少性能收益，还要结合实际界面、硬件和工作负载测量。对想尝试 GPUI 的开发者，我推荐可以先用 AI 辅助来开发一些需要的小工具，比如日志查看器、番茄钟、todo list 等。&lt;/p&gt;
+&lt;h2 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
+&lt;/h2&gt;&lt;ul&gt;
+&lt;li&gt;&lt;a class="link" href="https://gpui.rs/" target="_blank" rel="noopener"
+ &gt;GPUI 官网&lt;/a&gt;及&lt;a class="link" href="https://gpui.rs/examples/" target="_blank" rel="noopener"
+ &gt;官方示例&lt;/a&gt;：框架定位、声明式界面和状态更新方式。&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://zed.dev/blog/videogame" target="_blank" rel="noopener"
+ &gt;Leveraging Rust and the GPU to render user interfaces at 120 FPS&lt;/a&gt;：Zed 官方对渲染动机、图元 shader 和字形图集的介绍，发布于 2023 年，示例接口有历史版本差异。&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://github.com/zed-industries/zed/blob/main/crates/gpui/src/element.rs" target="_blank" rel="noopener"
+ &gt;Element 源码&lt;/a&gt;：布局申请、Prepaint 和 Paint 的接口及阶段状态。&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://github.com/zed-industries/zed/blob/main/crates/gpui/src/scene.rs" target="_blank" rel="noopener"
+ &gt;Scene 源码&lt;/a&gt;：图元集合、绘制顺序和批次组织。本文源码链接指向持续变化的 main 分支。&lt;/li&gt;
+&lt;li&gt;&lt;a class="link" href="https://zed.dev/blog/zed-decoded-linux-when" target="_blank" rel="noopener"
+ &gt;Linux when?&lt;/a&gt;：平台抽象和跨平台适配过程，文中具体后端选择属于 2024 年的历史状态。&lt;/li&gt;
+&lt;/ul&gt;</description></item><item><title>Google Rust Style Guide 阅读笔记：我认为值得关注的规则</title><link>https://Orangex-position0.github.io/posts/rust/rust-style-guide-practical-rules/</link><pubDate>Sun, 08 Nov 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-style-guide-practical-rules/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post Google Rust Style Guide 阅读笔记：我认为值得关注的规则" /&gt;&lt;p&gt;最近 Google 发布了一个文档：&lt;a class="link" href="https://google.github.io/styleguide/rustguide.html" target="_blank" rel="noopener"
  &gt;Rust Style Guides&lt;/a&gt;，介绍了 Rust 相关的编码规范，作为一个 Rust 语言的爱好者，这里我做了一个总结，挑选了几个觉得比较重要但又容易被忽视的编码规范。&lt;/p&gt;
 &lt;p&gt;阅读文章前的前提：你不是一个对 Rust 毫无了解的人，至少要知道 Rust 基础语法，因为下面规则中很多相关语法概念不会从头解释。&lt;/p&gt;
 &lt;h2 id="前置说明不同场景遵循不同规则"&gt;&lt;a href="#%e5%89%8d%e7%bd%ae%e8%af%b4%e6%98%8e%e4%b8%8d%e5%90%8c%e5%9c%ba%e6%99%af%e9%81%b5%e5%be%aa%e4%b8%8d%e5%90%8c%e8%a7%84%e5%88%99" class="header-anchor"&gt;&lt;/a&gt;前置说明：不同场景遵循不同规则
@@ -1033,8 +1289,8 @@
 &lt;li&gt;&lt;a class="link" href="https://crates.io/crates/gpui-kit/0.8.0" target="_blank" rel="noopener"
  &gt;GPUI Kit 0.8.0 依赖信息&lt;/a&gt;：发布版本与功能配置&lt;/li&gt;
 &lt;/ul&gt;
-&lt;p&gt;在线指南可能随新版本更新；若它与本文存在差异，先确认正在阅读的文档版本，不要单独升级或覆盖 Kit 内部依赖的某个 GPUI 包。&lt;/p&gt;</description></item><item><title>Rust 并发编程实战：从零实现简易线程池</title><link>https://Orangex-position0.github.io/posts/rust/rust-thread-pool/</link><pubDate>Thu, 15 Oct 2026 14:37:12 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-thread-pool/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post Rust 并发编程实战：从零实现简易线程池" /&gt;&lt;h1 id="用-rust-实现简易线程池任务传递共享接收端与优雅关闭"&gt;&lt;a href="#%e7%94%a8-rust-%e5%ae%9e%e7%8e%b0%e7%ae%80%e6%98%93%e7%ba%bf%e7%a8%8b%e6%b1%a0%e4%bb%bb%e5%8a%a1%e4%bc%a0%e9%80%92%e5%85%b1%e4%ba%ab%e6%8e%a5%e6%94%b6%e7%ab%af%e4%b8%8e%e4%bc%98%e9%9b%85%e5%85%b3%e9%97%ad" class="header-anchor"&gt;&lt;/a&gt;用 Rust 实现简易线程池：任务传递、共享接收端与优雅关闭
-&lt;/h1&gt;&lt;p&gt;最近学习 Rust 时，发现一个项目非常适合用来学习 Rust 并发编程：手写简易线程池。原因是我在 The Rust Book 的最后一个练习中发现其编写了一个线程池，虽然是简易版本，但非常适合用来学习相关并发知识。&lt;/p&gt;
+&lt;p&gt;在线指南可能随新版本更新；若它与本文存在差异，先确认正在阅读的文档版本，不要单独升级或覆盖 Kit 内部依赖的某个 GPUI 包。&lt;/p&gt;</description></item><item><title>Rust 并发编程实战：从零实现简易线程池</title><link>https://Orangex-position0.github.io/posts/rust/rust-thread-pool/</link><pubDate>Thu, 15 Oct 2026 14:37:12 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-thread-pool/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post Rust 并发编程实战：从零实现简易线程池" /&gt;&lt;h2 id="用-rust-实现简易线程池任务传递共享接收端与优雅关闭"&gt;&lt;a href="#%e7%94%a8-rust-%e5%ae%9e%e7%8e%b0%e7%ae%80%e6%98%93%e7%ba%bf%e7%a8%8b%e6%b1%a0%e4%bb%bb%e5%8a%a1%e4%bc%a0%e9%80%92%e5%85%b1%e4%ba%ab%e6%8e%a5%e6%94%b6%e7%ab%af%e4%b8%8e%e4%bc%98%e9%9b%85%e5%85%b3%e9%97%ad" class="header-anchor"&gt;&lt;/a&gt;用 Rust 实现简易线程池：任务传递、共享接收端与优雅关闭
+&lt;/h2&gt;&lt;p&gt;最近学习 Rust 时，发现一个项目非常适合用来学习 Rust 并发编程：手写简易线程池。原因是我在 The Rust Book 的最后一个练习中发现其编写了一个线程池，虽然是简易版本，但非常适合用来学习相关并发知识。&lt;/p&gt;
 &lt;p&gt;Prerequisite：要求你已经了解 Rust 的所有权、闭包和 trait，能看懂 &lt;code&gt;Arc&amp;lt;Mutex&amp;lt;_&amp;gt;&amp;gt;&lt;/code&gt; 的写法&lt;/p&gt;
 &lt;p&gt;本文只使用标准库，围绕三个问题逐步实现：&lt;/p&gt;
 &lt;ol&gt;
@@ -1556,8 +1812,8 @@
 &lt;li&gt;&lt;strong&gt;Rayon&lt;/strong&gt;：面向数据并行和 CPU 密集型计算，提供并行迭代器，并使用工作窃取调度。适合比较这里的共享任务队列与工作窃取的区别&lt;/li&gt;
 &lt;li&gt;&lt;strong&gt;Tokio&lt;/strong&gt;：异步运行时，调度的是实现 &lt;code&gt;Future&lt;/code&gt; 的任务。适合学习大量 I/O 等待如何通过异步机制组织；不能把这里的阻塞闭包原样当作普通异步任务使用。阻塞工作需要考虑 &lt;code&gt;spawn_blocking&lt;/code&gt; 等机制，CPU 密集型计算还应单独考虑并发度限制&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h1 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
-&lt;/h1&gt;&lt;ul&gt;
+&lt;h2 id="references"&gt;&lt;a href="#references" class="header-anchor"&gt;&lt;/a&gt;References
+&lt;/h2&gt;&lt;ul&gt;
 &lt;li&gt;&lt;a class="link" href="https://doc.rust-lang.org/stable/book/ch21-02-multithreaded.html" target="_blank" rel="noopener"
  &gt;The Rust Book 21.2&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;</description></item><item><title>Rust 心智模型：从 GC 语言转来后，写代码时应该怎样思考</title><link>https://Orangex-position0.github.io/posts/rust/rust-mental-model/</link><pubDate>Tue, 29 Sep 2026 21:00:06 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/rust/rust-mental-model/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post Rust 心智模型：从 GC 语言转来后，写代码时应该怎样思考" /&gt;&lt;p&gt;2026 年，Rust 已经被越来越多的公司用于基础设施开发，我也从年初开始学习 Rust。&lt;/p&gt;
@@ -1898,8 +2154,8 @@
 &lt;/h2&gt;&lt;ul&gt;
 &lt;li&gt;&lt;a class="link" href="https://www.youtube.com/watch?v=XGtWsfnnvh0" target="_blank" rel="noopener"
  &gt;The genius of Rust’s memory model&lt;/a&gt;&lt;/li&gt;
-&lt;/ul&gt;</description></item><item><title>常见编程语言的错误处理方式对比</title><link>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</link><pubDate>Thu, 10 Sep 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 常见编程语言的错误处理方式对比" /&gt;&lt;h1 id="常见编程语言的错误处理方式对比"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e7%bc%96%e7%a8%8b%e8%af%ad%e8%a8%80%e7%9a%84%e9%94%99%e8%af%af%e5%a4%84%e7%90%86%e6%96%b9%e5%bc%8f%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;常见编程语言的错误处理方式对比
-&lt;/h1&gt;
+&lt;/ul&gt;</description></item><item><title>常见编程语言的错误处理方式对比</title><link>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</link><pubDate>Thu, 10 Sep 2026 00:00:00 +0800</pubDate><guid>https://Orangex-position0.github.io/posts/programming-language/error-handling-comparison/</guid><description>&lt;img src="https://Orangex-position0.github.io/" alt="Featured image of post 常见编程语言的错误处理方式对比" /&gt;&lt;h2 id="常见编程语言的错误处理方式对比"&gt;&lt;a href="#%e5%b8%b8%e8%a7%81%e7%bc%96%e7%a8%8b%e8%af%ad%e8%a8%80%e7%9a%84%e9%94%99%e8%af%af%e5%a4%84%e7%90%86%e6%96%b9%e5%bc%8f%e5%af%b9%e6%af%94" class="header-anchor"&gt;&lt;/a&gt;常见编程语言的错误处理方式对比
+&lt;/h2&gt;
  &lt;blockquote&gt;
  &lt;p&gt;先说明，笔者主要以后端开发视角来讨论，比较熟悉 Java、Go 和 Rust。本文也会顺带提到 Python、TypeScript/JavaScript、Swift、Kotlin、Scala、Haskell、Zig 等语言，但重点不是做语言百科（因为我大部分也不会……），而是比较不同错误处理设计背后的取舍。&lt;/p&gt;
 
