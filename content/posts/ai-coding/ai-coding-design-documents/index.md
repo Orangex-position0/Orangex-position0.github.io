@@ -9,7 +9,7 @@ image = 'cover.png'
 tags = ['AI Coding', 'SDD', '设计文档', '架构设计', 'ADR']
 +++
 
-# AI Coding 之后，哪些设计知识值得留下？
+## AI Coding 之后，哪些设计知识值得留下？
 
 用 AI Coding 和规格驱动开发（SDD）做项目时，我一直有个疑问：功能完成后，`spec.md`、`plan.md` 这些文档还要留在 Git 仓库里吗？
 

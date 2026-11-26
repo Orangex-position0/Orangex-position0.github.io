@@ -9,7 +9,7 @@ categories = ['rust']
 tags = ['rust', 'thread-pool', 'concurrency']
 +++
 
-# 用 Rust 实现简易线程池：任务传递、共享接收端与优雅关闭
+## 用 Rust 实现简易线程池：任务传递、共享接收端与优雅关闭
 
 最近学习 Rust 时，发现一个项目非常适合用来学习 Rust 并发编程：手写简易线程池。原因是我在 The Rust Book 的最后一个练习中发现其编写了一个线程池，虽然是简易版本，但非常适合用来学习相关并发知识。
 
@@ -644,6 +644,6 @@ fn main() {
 - **Rayon**：面向数据并行和 CPU 密集型计算，提供并行迭代器，并使用工作窃取调度。适合比较这里的共享任务队列与工作窃取的区别
 - **Tokio**：异步运行时，调度的是实现 `Future` 的任务。适合学习大量 I/O 等待如何通过异步机制组织；不能把这里的阻塞闭包原样当作普通异步任务使用。阻塞工作需要考虑 `spawn_blocking` 等机制，CPU 密集型计算还应单独考虑并发度限制
 
-# References
+## References
 
 - [The Rust Book 21.2](https://doc.rust-lang.org/stable/book/ch21-02-multithreaded.html)

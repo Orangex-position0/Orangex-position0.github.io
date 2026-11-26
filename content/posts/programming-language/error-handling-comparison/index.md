@@ -10,7 +10,7 @@ categories = ['programming-language']
 tags = ['error-handling', 'java', 'go', 'rust', 'typescript', 'python']
 +++
 
-# 常见编程语言的错误处理方式对比
+## 常见编程语言的错误处理方式对比
 
 > 先说明，笔者主要以后端开发视角来讨论，比较熟悉 Java、Go 和 Rust。本文也会顺带提到 Python、TypeScript/JavaScript、Swift、Kotlin、Scala、Haskell、Zig 等语言，但重点不是做语言百科（因为我大部分也不会……），而是比较不同错误处理设计背后的取舍。
 
