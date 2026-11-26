@@ -78,6 +78,11 @@ git submodule update --remote --merge
 
 ## 内容组织
 
+### 标题层级
+
+- 新建或编辑 `content/posts/` 下的文章时，文章总标题由 front matter 的 `title` 提供，正文从 H2（`##`）开始，子节依次使用 H3、H4。
+- Hugo 默认目录收录 H2～H3；完成标题调整后，构建并检查生成页面的目录，确认顶层章节和子节按层级出现。
+
 ### Front Matter 模板
 文章使用 TOML 格式的 front matter：
 
